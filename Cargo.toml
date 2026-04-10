@@ -1,0 +1,38 @@
+[package]
+name = "kraken2"
+version = "0.1.0"
+edition = "2021"
+description = "Taxonomic sequence classification system — Rust port of Kraken 2"
+license = "MIT"
+
+[lib]
+name = "kraken2"
+path = "src/lib.rs"
+
+[[bin]]
+name = "kraken2"
+path = "src/bin/kraken2.rs"
+
+[dependencies]
+clap = { version = "4", features = ["derive"] }
+rayon = "1"
+memmap2 = "0.9"
+parking_lot = "0.12"
+flate2 = "1"
+crossbeam = "0.8"
+bzip2 = "0.6"
+ureq = "3"
+noodles = { version = "0.109", features = ["fasta", "fastq"] }
+libc = "0.2"
+tar = "0.4"
+
+[dev-dependencies]
+tempfile = "3"
+
+[profile.release]
+lto = true
+codegen-units = 1
+
+[profile.bench]
+lto = true
+codegen-units = 1
