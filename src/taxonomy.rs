@@ -1,4 +1,5 @@
-use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
+use ahash::AHashMap as HashMap;
 use std::fs::File;
 use std::io::{self, BufRead, BufReader, Read, Write};
 use crate::mmap_file::MMapFile;

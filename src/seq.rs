@@ -8,7 +8,7 @@ use crate::types::{Sequence, SequenceFormat};
 /// Uses a simple line-based parser to match kseq.h behavior exactly.
 /// Supports gzip and bzip2 compressed input (auto-detected by file extension).
 pub struct BatchSequenceReader {
-    reader: BufReader<Box<dyn Read>>,
+    reader: BufReader<Box<dyn Read + Send>>,
     seqs: Vec<Sequence>,
     curr: usize,
     size: usize,
@@ -17,7 +17,7 @@ pub struct BatchSequenceReader {
 }
 
 /// Open a file, auto-detecting compression from extension.
-fn open_possibly_compressed(filename: &str) -> io::Result<Box<dyn Read>> {
+fn open_possibly_compressed(filename: &str) -> io::Result<Box<dyn Read + Send>> {
     let file = File::open(filename)?;
     if filename.ends_with(".gz") {
         Ok(Box::new(flate2::read::GzDecoder::new(file)))
@@ -32,7 +32,7 @@ impl BatchSequenceReader {
     /// Open a file for reading. If filename is None, reads from stdin.
     /// Automatically decompresses `.gz` and `.bz2` files.
     pub fn new(filename: Option<&str>) -> io::Result<Self> {
-        let reader: Box<dyn Read> = match filename {
+        let reader: Box<dyn Read + Send> = match filename {
             Some(f) => open_possibly_compressed(f)?,
             None => Box::new(io::stdin()),
         };
@@ -58,7 +58,7 @@ impl BatchSequenceReader {
     /// let seq = reader.next_sequence().unwrap();
     /// assert_eq!(seq.header, "seq1");
     /// ```
-    pub fn from_reader<R: Read + 'static>(reader: R) -> Self {
+    pub fn from_reader<R: Read + Send + 'static>(reader: R) -> Self {
         BatchSequenceReader {
             reader: BufReader::new(Box::new(reader)),
             seqs: Vec::new(),

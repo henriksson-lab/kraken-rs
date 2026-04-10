@@ -108,7 +108,9 @@ impl MinimizerScanner {
     }
 
     pub fn load_sequence(&mut self, seq: &str, start: usize, finish: usize) {
-        self.seq = seq.as_bytes().to_vec();
+        let bytes = seq.as_bytes();
+        self.seq.clear();
+        self.seq.extend_from_slice(bytes);
         self.start = start;
         let mut finish = finish;
         if finish > self.seq.len() {

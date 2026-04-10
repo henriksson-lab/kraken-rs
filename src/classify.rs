@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use ahash::AHashMap as HashMap;
 use std::fs::File;
 use std::io::{self, BufWriter, Write};
 
@@ -147,12 +147,13 @@ fn append_hitlist_entry(
     taxonomy: &Taxonomy,
     with_trailing_space: bool,
 ) {
+    use std::fmt::Write as FmtWrite;
     if code != MATE_PAIR_BORDER_TAXON && code != READING_FRAME_BORDER_TAXON {
         if code == AMBIGUOUS_SPAN_TAXON {
-            result.push_str(&format!("A:{}", count));
+            let _ = write!(result, "A:{}", count);
         } else {
             let ext_code = taxonomy.node(code).external_id;
-            result.push_str(&format!("{}:{}", ext_code, count));
+            let _ = write!(result, "{}:{}", ext_code, count);
         }
         if with_trailing_space {
             result.push(' ');
@@ -212,9 +213,11 @@ pub fn classify_sequence(
     hit_counts: &mut HashMap<TaxId, u32>,
     tx_frames: &mut Vec<String>,
     curr_taxon_counts: &mut TaxonCounters,
-) -> (TaxId, String) {
+    output_buf: &mut String,
+) -> TaxId {
     taxa.clear();
     hit_counts.clear();
+    output_buf.clear();
     let frame_ct = if opts.use_translated_search { 6 } else { 1 };
     let mut minimizer_hit_groups: i64 = 0;
     let mut call: TaxId = 0;
@@ -321,13 +324,10 @@ pub fn classify_sequence(
         curr_taxon_counts.entry(call).or_default().increment_read_count();
     }
 
-    // Build Kraken output line
-    let mut koss = String::new();
-    if call != 0 {
-        koss.push_str("C\t");
-    } else {
-        koss.push_str("U\t");
-    }
+    // Build Kraken output line into reusable buffer
+    use std::fmt::Write as FmtWrite;
+    let koss = output_buf;
+    koss.push_str(if call != 0 { "C\t" } else { "U\t" });
 
     if !opts.paired_end_processing {
         koss.push_str(&dna.header);
@@ -340,25 +340,25 @@ pub fn classify_sequence(
     if opts.print_scientific_name {
         if call != 0 {
             let name = taxonomy.name_at_offset(taxonomy.node(call).name_offset);
-            koss.push_str(&format!("{} (taxid {})", name, ext_call));
+            let _ = write!(koss, "{} (taxid {})", name, ext_call);
         } else {
-            koss.push_str(&format!("unclassified (taxid {})", ext_call));
+            let _ = write!(koss, "unclassified (taxid {})", ext_call);
         }
     } else {
-        koss.push_str(&ext_call.to_string());
+        let _ = write!(koss, "{}", ext_call);
     }
     koss.push('\t');
 
     if !opts.paired_end_processing {
-        koss.push_str(&dna.seq.len().to_string());
+        let _ = write!(koss, "{}", dna.seq.len());
     } else {
         let len2 = dna2.map(|d| d.seq.len()).unwrap_or(0);
-        koss.push_str(&format!("{}|{}", dna.seq.len(), len2));
+        let _ = write!(koss, "{}|{}", dna.seq.len(), len2);
     }
     koss.push('\t');
 
     if opts.quick_mode && quick_exit {
-        koss.push_str(&format!("{}:Q", ext_call));
+        let _ = write!(koss, "{}:Q", ext_call);
     } else if taxa.is_empty() {
         koss.push_str("0:0");
     } else {
@@ -366,7 +366,7 @@ pub fn classify_sequence(
     }
     koss.push('\n');
 
-    (call, koss)
+    call
 }
 
 /// Helper to write classification output for a single sequence.
@@ -468,6 +468,7 @@ pub fn run_classify(
     let mut taxa = Vec::new();
     let mut hit_counts = HashMap::new();
     let mut tx_frames = Vec::new();
+    let mut output_buf = String::with_capacity(512);
 
     if classify_opts.paired_end_processing && !classify_opts.single_file_pairs && input_files.len() >= 2 {
         // Paired-end from two files
@@ -486,12 +487,12 @@ pub fn run_classify(
                             mask_low_quality_bases(&mut s1, classify_opts.minimum_quality_score);
                             mask_low_quality_bases(&mut s2, classify_opts.minimum_quality_score);
                         }
-                        let (call, kraken_str) = classify_sequence(
+                        let call = classify_sequence(
                             &s1, Some(&s2), &hash, &taxonomy, &idx_opts, &classify_opts,
                             &mut scanner, &mut taxa, &mut hit_counts, &mut tx_frames,
-                            &mut taxon_counters,
+                            &mut taxon_counters, &mut output_buf,
                         );
-                        process_output(call, &kraken_str, &s1, &taxonomy,
+                        process_output(call, &output_buf, &s1, &taxonomy,
                             &mut kraken_out, &mut classified_out, &mut unclassified_out,
                             &mut stats)?;
                     }
@@ -515,12 +516,12 @@ pub fn run_classify(
                             mask_low_quality_bases(&mut s1, classify_opts.minimum_quality_score);
                             mask_low_quality_bases(&mut s2, classify_opts.minimum_quality_score);
                         }
-                        let (call, kraken_str) = classify_sequence(
+                        let call = classify_sequence(
                             &s1, Some(&s2), &hash, &taxonomy, &idx_opts, &classify_opts,
                             &mut scanner, &mut taxa, &mut hit_counts, &mut tx_frames,
-                            &mut taxon_counters,
+                            &mut taxon_counters, &mut output_buf,
                         );
-                        process_output(call, &kraken_str, &s1, &taxonomy,
+                        process_output(call, &output_buf, &s1, &taxonomy,
                             &mut kraken_out, &mut classified_out, &mut unclassified_out,
                             &mut stats)?;
                     }
@@ -531,31 +532,47 @@ pub fn run_classify(
     } else {
         // Single-end processing
         if classify_opts.num_threads > 1 {
-            // Multi-threaded: read batches serially, classify in parallel, output serially
-            rayon::ThreadPoolBuilder::new()
-                .num_threads(classify_opts.num_threads)
-                .build_global()
-                .ok(); // Ignore if already initialized
+            // Multi-threaded: C++-style parallel pipeline.
+            // Each thread: lock reader -> read batch -> unlock -> classify -> queue output.
+            // Output is flushed in block_id order to preserve input ordering.
+            use std::sync::atomic::{AtomicU64, Ordering as AtomOrd};
+            use std::collections::BinaryHeap;
+            use std::cmp::Reverse;
+
+            struct OutputBlock {
+                block_id: u64,
+                results: Vec<(TaxId, String, Sequence)>,
+                local_counters: TaxonCounters,
+                local_stats: ClassificationStats,
+            }
+            impl PartialEq for OutputBlock { fn eq(&self, o: &Self) -> bool { self.block_id == o.block_id } }
+            impl Eq for OutputBlock {}
+            impl PartialOrd for OutputBlock { fn partial_cmp(&self, o: &Self) -> Option<std::cmp::Ordering> { Some(self.cmp(o)) } }
+            impl Ord for OutputBlock { fn cmp(&self, o: &Self) -> std::cmp::Ordering { o.block_id.cmp(&self.block_id) } } // min-heap
 
             for input_file in input_files {
                 let filename = if input_file == "-" { None } else { Some(input_file.as_str()) };
-                let mut reader = BatchSequenceReader::new(filename)?;
+                let reader = parking_lot::Mutex::new(BatchSequenceReader::new(filename)?);
+                let next_block_id = AtomicU64::new(0);
+                let next_output_id = parking_lot::Mutex::new(0u64);
+                let output_queue: parking_lot::Mutex<BinaryHeap<OutputBlock>> =
+                    parking_lot::Mutex::new(BinaryHeap::new());
 
-                while reader.load_block(3 * 1024 * 1024) {
-                    // Collect batch
-                    let mut batch: Vec<Sequence> = Vec::new();
-                    while let Some(seq) = reader.next_sequence() {
-                        let mut seq = seq.clone();
-                        if classify_opts.minimum_quality_score > 0 {
-                            mask_low_quality_bases(&mut seq, classify_opts.minimum_quality_score);
-                        }
-                        batch.push(seq);
-                    }
+                // Wrap mutable output state in a mutex
+                let output_state: parking_lot::Mutex<(
+                    &mut Option<BufWriter<File>>,
+                    &mut Option<BufWriter<File>>,
+                    &mut Option<BufWriter<File>>,
+                    &mut ClassificationStats,
+                    &mut TaxonCounters,
+                )> = parking_lot::Mutex::new((
+                    &mut kraken_out, &mut classified_out, &mut unclassified_out,
+                    &mut stats, &mut taxon_counters,
+                ));
 
-                    // Classify batch in parallel
-                    let results: Vec<(TaxId, String, TaxonCounters)> = batch
-                        .par_iter()
-                        .map(|seq| {
+                crossbeam::scope(|s| {
+                    for _ in 0..classify_opts.num_threads {
+                        s.spawn(|_| {
                             let mut scanner = MinimizerScanner::new(
                                 idx_opts.k as isize, idx_opts.l as isize,
                                 idx_opts.spaced_seed_mask, idx_opts.dna_db,
@@ -564,29 +581,83 @@ pub fn run_classify(
                             let mut taxa = Vec::new();
                             let mut hit_counts = HashMap::new();
                             let mut tx_frames = Vec::new();
-                            let mut local_counters = TaxonCounters::new();
+                            let mut local_buf = String::with_capacity(512);
 
-                            let (call, kraken_str) = classify_sequence(
-                                seq, None, &hash, &taxonomy, &idx_opts, &classify_opts,
-                                &mut scanner, &mut taxa, &mut hit_counts, &mut tx_frames,
-                                &mut local_counters,
-                            );
-                            (call, kraken_str, local_counters)
-                        })
-                        .collect();
+                            loop {
+                                // Read a batch (critical section)
+                                let (batch, block_id) = {
+                                    let mut rdr = reader.lock();
+                                    if !rdr.load_block(3 * 1024 * 1024) {
+                                        break;
+                                    }
+                                    let bid = next_block_id.fetch_add(1, AtomOrd::SeqCst);
+                                    let mut batch = Vec::new();
+                                    while let Some(seq) = rdr.next_sequence() {
+                                        batch.push(seq.clone());
+                                    }
+                                    (batch, bid)
+                                };
 
-                    // Output serially in order
-                    for (i, (call, kraken_str, local_counters)) in results.into_iter().enumerate() {
-                        stats.total_sequences += 1;
-                        // Merge thread-local counters
-                        for (taxid, counter) in local_counters {
-                            taxon_counters.entry(taxid).or_default().merge(&counter);
-                        }
-                        process_output(call, &kraken_str, &batch[i], &taxonomy,
-                            &mut kraken_out, &mut classified_out, &mut unclassified_out,
-                            &mut stats)?;
+                                // Classify batch (no locks held)
+                                let mut results = Vec::with_capacity(batch.len());
+                                let mut local_counters = TaxonCounters::new();
+                                let mut local_stats = ClassificationStats::default();
+
+                                for mut seq in batch {
+                                    if classify_opts.minimum_quality_score > 0 {
+                                        mask_low_quality_bases(&mut seq, classify_opts.minimum_quality_score);
+                                    }
+                                    let call = classify_sequence(
+                                        &seq, None, &hash, &taxonomy, &idx_opts, &classify_opts,
+                                        &mut scanner, &mut taxa, &mut hit_counts, &mut tx_frames,
+                                        &mut local_counters, &mut local_buf,
+                                    );
+                                    local_stats.total_sequences += 1;
+                                    if call != 0 { local_stats.total_classified += 1; }
+                                    else { local_stats.total_unclassified += 1; }
+                                    results.push((call, local_buf.clone(), seq));
+                                }
+
+                                // Queue output block
+                                let block = OutputBlock {
+                                    block_id, results, local_counters, local_stats,
+                                };
+                                {
+                                    let mut q = output_queue.lock();
+                                    q.push(block);
+                                }
+
+                                // Try to flush output in order
+                                loop {
+                                    let mut q = output_queue.lock();
+                                    let mut next_out = next_output_id.lock();
+                                    if q.peek().map(|b| b.block_id) == Some(*next_out) {
+                                        let blk = q.pop().unwrap();
+                                        *next_out += 1;
+                                        drop(q);
+                                        drop(next_out);
+
+                                        // Write output (holds output_state lock)
+                                        let mut state = output_state.lock();
+                                        let (ko, co, uo, st, tc) = &mut *state;
+                                        st.total_sequences += blk.local_stats.total_sequences;
+                                        st.total_classified += blk.local_stats.total_classified;
+                                        st.total_unclassified += blk.local_stats.total_unclassified;
+                                        for (taxid, counter) in blk.local_counters {
+                                            tc.entry(taxid).or_default().merge(&counter);
+                                        }
+                                        for (call, kraken_str, seq) in &blk.results {
+                                            let _ = process_output(*call, kraken_str, seq, &taxonomy,
+                                                ko, co, uo, &mut ClassificationStats::default());
+                                        }
+                                    } else {
+                                        break;
+                                    }
+                                }
+                            }
+                        });
                     }
-                }
+                }).expect("Thread panicked");
             }
         } else {
             // Single-threaded processing
@@ -603,12 +674,12 @@ pub fn run_classify(
                             mask_low_quality_bases(&mut seq, classify_opts.minimum_quality_score);
                         }
 
-                        let (call, kraken_str) = classify_sequence(
+                        let call = classify_sequence(
                             &seq, None, &hash, &taxonomy, &idx_opts, &classify_opts,
                             &mut scanner, &mut taxa, &mut hit_counts, &mut tx_frames,
-                            &mut taxon_counters,
+                            &mut taxon_counters, &mut output_buf,
                         );
-                        process_output(call, &kraken_str, &seq, &taxonomy,
+                        process_output(call, &output_buf, &seq, &taxonomy,
                             &mut kraken_out, &mut classified_out, &mut unclassified_out,
                             &mut stats)?;
                     }
@@ -695,14 +766,15 @@ pub fn classify_sequences_in_memory(
     let mut hit_counts = HashMap::new();
     let mut tx_frames = Vec::new();
     let mut taxon_counters = TaxonCounters::new();
+    let mut output_buf = String::with_capacity(512);
 
     let mut results = Vec::with_capacity(sequences.len());
 
     for seq in sequences {
-        let (call, kraken_line) = classify_sequence(
+        let call = classify_sequence(
             seq, None, hash, taxonomy, idx_opts, opts,
             &mut scanner, &mut taxa, &mut hit_counts, &mut tx_frames,
-            &mut taxon_counters,
+            &mut taxon_counters, &mut output_buf,
         );
 
         let external_id = taxonomy.node(call).external_id;
@@ -710,11 +782,84 @@ pub fn classify_sequences_in_memory(
             call,
             external_id,
             classified: call != 0,
-            kraken_line,
+            kraken_line: output_buf.clone(),
         });
     }
 
     results
+}
+
+/// A loaded Kraken 2 database ready for classification.
+///
+/// Load once, classify many times. This is the recommended high-level API.
+///
+/// # Example
+/// ```no_run
+/// use kraken2::classify::{ClassifyDb, ClassifyOptions};
+/// use kraken2::types::Sequence;
+///
+/// let db = ClassifyDb::from_directory("path/to/db").unwrap();
+/// let opts = ClassifyOptions::default();
+///
+/// // Classify one sequence
+/// let seq = Sequence {
+///     header: "read1".to_string(),
+///     seq: "ACGTACGTACGTACGTACGTACGTACGTACGTACGTACGT".to_string(),
+///     ..Default::default()
+/// };
+/// let results = db.classify(&[seq], &opts);
+///
+/// // Classify another batch with the same loaded database
+/// let results2 = db.classify(&[/* more sequences */], &opts);
+/// ```
+pub struct ClassifyDb {
+    pub idx_opts: IndexOptions,
+    pub taxonomy: Taxonomy,
+    pub hash: CompactHashTable,
+}
+
+impl ClassifyDb {
+    /// Load a database from a directory containing hash.k2d, taxo.k2d, opts.k2d.
+    pub fn from_directory(db_dir: &str) -> io::Result<Self> {
+        Self::from_files(
+            &format!("{}/hash.k2d", db_dir),
+            &format!("{}/taxo.k2d", db_dir),
+            &format!("{}/opts.k2d", db_dir),
+            false,
+        )
+    }
+
+    /// Load a database from individual file paths.
+    pub fn from_files(
+        hash_path: &str,
+        taxonomy_path: &str,
+        opts_path: &str,
+        memory_mapping: bool,
+    ) -> io::Result<Self> {
+        let idx_opts = IndexOptions::read_from_file(opts_path)?;
+        let mut taxonomy = Taxonomy::from_file(taxonomy_path, memory_mapping)?;
+        taxonomy.generate_external_to_internal_id_map();
+        let hash = CompactHashTable::from_file(hash_path, memory_mapping)?;
+        Ok(ClassifyDb { idx_opts, taxonomy, hash })
+    }
+
+    /// Classify a batch of sequences. Can be called repeatedly.
+    pub fn classify(
+        &self,
+        sequences: &[Sequence],
+        opts: &ClassifyOptions,
+    ) -> Vec<ClassificationResult> {
+        classify_sequences_in_memory(sequences, &self.hash, &self.taxonomy, &self.idx_opts, opts)
+    }
+
+    /// Classify a single sequence. Convenience wrapper.
+    pub fn classify_one(
+        &self,
+        seq: &Sequence,
+        opts: &ClassifyOptions,
+    ) -> ClassificationResult {
+        self.classify(std::slice::from_ref(seq), opts).into_iter().next().unwrap()
+    }
 }
 
 /// Run classification in daemon mode.
@@ -785,6 +930,7 @@ pub fn run_daemon(
         let mut taxa = Vec::new();
         let mut hit_counts = HashMap::new();
         let mut tx_frames = Vec::new();
+        let mut output_buf = String::with_capacity(512);
 
         for input_file in &files {
             let filename = if input_file == "-" { None } else { Some(input_file.as_str()) };
@@ -795,16 +941,16 @@ pub fn run_daemon(
                     let seq = seq.clone();
                     stats.total_sequences += 1;
 
-                    let (call, kraken_str) = classify_sequence(
+                    let call = classify_sequence(
                         &seq, None, &hash, &taxonomy, &idx_opts, &classify_opts,
                         &mut scanner, &mut taxa, &mut hit_counts, &mut tx_frames,
-                        &mut taxon_counters,
+                        &mut taxon_counters, &mut output_buf,
                     );
 
                     if call != 0 {
                         stats.total_classified += 1;
                     }
-                    print!("{}", kraken_str);
+                    print!("{}", output_buf);
                 }
             }
         }

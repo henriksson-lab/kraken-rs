@@ -24,6 +24,7 @@ bzip2 = "0.6"
 ureq = "3"
 noodles = { version = "0.109", features = ["fasta", "fastq"] }
 libc = "0.2"
+ahash = "0.8"
 tar = "0.4"
 
 [dev-dependencies]

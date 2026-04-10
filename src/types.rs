@@ -8,7 +8,7 @@ pub type HKey = u64;
 pub type HValue = u32;
 
 /// Map from taxonomy IDs to counts.
-pub type TaxonCounts = std::collections::HashMap<TaxId, u64>;
+pub type TaxonCounts = ahash::AHashMap<TaxId, u64>;
 
 /// Maximum taxonomy ID value.
 pub const TAXID_MAX: TaxId = u64::MAX;
