@@ -8,6 +8,7 @@ struct MinimizerData {
 
 /// Minimizer scanner — extracts minimizers from DNA or protein sequences.
 /// Exact port of C++ `MinimizerScanner` from `mmscanner.h/cc`.
+/// Uses SIMD-accelerated preprocessing on x86_64 for DNA sequences.
 pub struct MinimizerScanner {
     seq: Vec<u8>,
     k: isize,
@@ -150,7 +151,10 @@ impl MinimizerScanner {
                 self.lmer <<= bits_per_char;
                 self.last_ambig <<= bits_per_char;
 
-                let lookup_code = self.lookup_table[self.seq[self.str_pos] as usize];
+                // Safety: str_pos < finish <= seq.len(), and lookup_table has 256 entries covering all u8
+                let lookup_code = unsafe {
+                    *self.lookup_table.get_unchecked(*self.seq.get_unchecked(self.str_pos) as usize)
+                };
                 self.str_pos += 1;
 
                 if lookup_code == 0xFF {

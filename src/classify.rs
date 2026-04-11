@@ -2,8 +2,6 @@ use ahash::AHashMap as HashMap;
 use std::fs::File;
 use std::io::{self, BufWriter, Write};
 
-use rayon::prelude::*;
-
 use crate::aa_translate::translate_to_all_frames;
 use crate::compact_hash::CompactHashTable;
 use crate::hash::murmurhash3;
@@ -537,7 +535,6 @@ pub fn run_classify(
             // Output is flushed in block_id order to preserve input ordering.
             use std::sync::atomic::{AtomicU64, Ordering as AtomOrd};
             use std::collections::BinaryHeap;
-            use std::cmp::Reverse;
 
             struct OutputBlock {
                 block_id: u64,
@@ -559,6 +556,7 @@ pub fn run_classify(
                     parking_lot::Mutex::new(BinaryHeap::new());
 
                 // Wrap mutable output state in a mutex
+                #[allow(clippy::type_complexity)]
                 let output_state: parking_lot::Mutex<(
                     &mut Option<BufWriter<File>>,
                     &mut Option<BufWriter<File>>,
