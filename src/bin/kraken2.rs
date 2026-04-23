@@ -1,11 +1,14 @@
 use clap::{Parser, Subcommand};
 use std::process;
 
-use kraken2::classify::{self, ClassifyOptions};
-use kraken2::build_db::{self, BuildOptions};
-use kraken2::estimate::{self, EstimateOptions};
-use kraken2::types::*;
-use kraken2::utilities::expand_spaced_seed_mask;
+use kraken2::build_db;
+use kraken2::blast;
+use kraken2::classify;
+use kraken2::dump_table;
+use kraken2::dust;
+use kraken2::estimate;
+use kraken2::lookup;
+use kraken2::mmtest;
 
 #[derive(Parser)]
 #[command(name = "kraken2", about = "Taxonomic sequence classification system")]
@@ -271,6 +274,203 @@ enum Commands {
         #[arg(long)]
         include_taxid: bool,
     },
+
+    /// Dump a Kraken 2 table using the translated dump_table entrypoint
+    DumpTable {
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        args: Vec<String>,
+    },
+
+    /// Look up accession numbers using the translated standalone tool
+    LookupAccessionNumbers {
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        args: Vec<String>,
+    },
+
+    /// Mask low-complexity regions using the translated k2mask entrypoint
+    K2mask {
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        args: Vec<String>,
+    },
+
+    /// Run the translated minimizer scanner smoke-test tool
+    Mmtest,
+}
+
+fn push_flag(args: &mut Vec<String>, flag: &str) {
+    args.push(flag.to_string());
+}
+
+fn push_option<T: ToString>(args: &mut Vec<String>, flag: &str, value: T) {
+    args.push(flag.to_string());
+    args.push(value.to_string());
+}
+
+fn classify_args(
+    db: String,
+    threads: usize,
+    quick: bool,
+    confidence: f64,
+    minimum_hit_groups: i64,
+    paired: bool,
+    single_file_pairs: bool,
+    classified_out: Option<String>,
+    unclassified_out: Option<String>,
+    output: Option<String>,
+    report: Option<String>,
+    use_mpa_style: bool,
+    report_zero_counts: bool,
+    report_minimizer_data: bool,
+    memory_mapping: bool,
+    use_names: bool,
+    minimum_base_quality: u8,
+    daemon: bool,
+    input: Vec<String>,
+) -> Vec<String> {
+    let mut args = vec!["classify".to_string()];
+    push_option(&mut args, "-H", format!("{db}/hash.k2d"));
+    push_option(&mut args, "-t", format!("{db}/taxo.k2d"));
+    push_option(&mut args, "-o", format!("{db}/opts.k2d"));
+    push_option(&mut args, "-p", threads);
+    push_option(&mut args, "-T", confidence);
+    push_option(&mut args, "-g", minimum_hit_groups);
+    push_option(&mut args, "-Q", minimum_base_quality);
+    if quick {
+        push_flag(&mut args, "-q");
+    }
+    if paired {
+        push_flag(&mut args, "-P");
+    }
+    if single_file_pairs {
+        push_flag(&mut args, "-S");
+    }
+    if use_mpa_style {
+        push_flag(&mut args, "-m");
+    }
+    if report_zero_counts {
+        push_flag(&mut args, "-z");
+    }
+    if report_minimizer_data {
+        push_flag(&mut args, "-K");
+    }
+    if memory_mapping {
+        push_flag(&mut args, "-M");
+    }
+    if use_names {
+        push_flag(&mut args, "-n");
+    }
+    if daemon {
+        push_flag(&mut args, "-D");
+    }
+    if let Some(path) = report {
+        push_option(&mut args, "-R", path);
+    }
+    if let Some(path) = classified_out {
+        push_option(&mut args, "-C", path);
+    }
+    if let Some(path) = unclassified_out {
+        push_option(&mut args, "-U", path);
+    }
+    if let Some(path) = output {
+        push_option(&mut args, "-O", path);
+    }
+    args.extend(input);
+    args
+}
+
+#[allow(clippy::too_many_arguments)]
+fn build_db_args(
+    hashtable: String,
+    taxonomy: String,
+    options: String,
+    id_map: String,
+    ncbi_taxonomy_dir: String,
+    kmer_len: usize,
+    minimizer_len: usize,
+    capacity: usize,
+    max_capacity: usize,
+    threads: usize,
+    protein: bool,
+    fast_build: bool,
+    block_size: usize,
+    subblock_size: usize,
+    taxid_bits: usize,
+    spaced_seed: Option<String>,
+    toggle_mask: Option<String>,
+) -> Vec<String> {
+    let mut args = vec!["build_db".to_string()];
+    push_option(&mut args, "-H", hashtable);
+    push_option(&mut args, "-t", taxonomy);
+    push_option(&mut args, "-o", options);
+    push_option(&mut args, "-m", id_map);
+    push_option(&mut args, "-n", ncbi_taxonomy_dir);
+    push_option(&mut args, "-k", kmer_len);
+    push_option(&mut args, "-l", minimizer_len);
+    push_option(&mut args, "-c", capacity);
+    push_option(&mut args, "-p", threads);
+    push_option(&mut args, "-B", block_size);
+    push_option(&mut args, "-b", subblock_size);
+    push_option(&mut args, "-r", taxid_bits);
+    if max_capacity > 0 {
+        push_option(&mut args, "-M", max_capacity);
+    }
+    if protein {
+        push_flag(&mut args, "-X");
+    }
+    if fast_build {
+        push_flag(&mut args, "-F");
+    }
+    if let Some(mask) = spaced_seed {
+        push_option(&mut args, "-S", mask);
+    }
+    if let Some(mask) = toggle_mask {
+        push_option(&mut args, "-T", mask);
+    }
+    args
+}
+
+fn estimate_args(
+    kmer_len: usize,
+    minimizer_len: usize,
+    n: usize,
+    protein: bool,
+    threads: usize,
+    block_size: usize,
+    spaced_seed: Option<String>,
+    toggle_mask: Option<String>,
+) -> Vec<String> {
+    let mut args = vec!["estimate_capacity".to_string()];
+    push_option(&mut args, "-k", kmer_len);
+    push_option(&mut args, "-l", minimizer_len);
+    push_option(&mut args, "-n", n);
+    push_option(&mut args, "-p", threads);
+    push_option(&mut args, "-B", block_size);
+    if protein {
+        push_flag(&mut args, "-X");
+    }
+    if let Some(mask) = spaced_seed {
+        push_option(&mut args, "-S", mask);
+    }
+    if let Some(mask) = toggle_mask {
+        push_option(&mut args, "-T", mask);
+    }
+    args
+}
+
+fn blast_to_fasta_args(input: String, output: String, include_taxid: bool) -> Vec<String> {
+    let mut args = vec!["blast_to_fasta".to_string()];
+    push_option(&mut args, "-o", output);
+    if include_taxid {
+        push_flag(&mut args, "-t");
+    }
+    args.push(input);
+    args
+}
+
+fn passthrough_args(prog: &str, args: Vec<String>) -> Vec<String> {
+    let mut full_args = vec![prog.to_string()];
+    full_args.extend(args);
+    full_args
 }
 
 fn main() {
@@ -278,63 +478,119 @@ fn main() {
 
     match cli.command {
         Commands::Classify {
-            db, threads, quick, confidence, minimum_hit_groups,
-            paired, single_file_pairs, classified_out, unclassified_out, output, report,
-            use_mpa_style, report_zero_counts, report_minimizer_data,
-            memory_mapping, use_names, minimum_base_quality, daemon, input,
+            db,
+            threads,
+            quick,
+            confidence,
+            minimum_hit_groups,
+            paired,
+            single_file_pairs,
+            classified_out,
+            unclassified_out,
+            output,
+            report,
+            use_mpa_style,
+            report_zero_counts,
+            report_minimizer_data,
+            memory_mapping,
+            use_names,
+            minimum_base_quality,
+            daemon,
+            input,
         } => {
-            let hash_file = format!("{}/hash.k2d", db);
-            let taxo_file = format!("{}/taxo.k2d", db);
-            let opts_file = format!("{}/opts.k2d", db);
-
-            let opts = ClassifyOptions {
-                confidence_threshold: confidence,
-                minimum_quality_score: minimum_base_quality,
+            let args = classify_args(
+                db,
+                threads,
+                quick,
+                confidence,
                 minimum_hit_groups,
-                paired_end_processing: paired || single_file_pairs,
+                paired,
                 single_file_pairs,
-                print_scientific_name: use_names,
-                quick_mode: quick,
-                report_kmer_data: report_minimizer_data,
+                classified_out,
+                unclassified_out,
+                output,
+                report,
+                use_mpa_style,
                 report_zero_counts,
-                mpa_style_report: use_mpa_style,
-                use_memory_mapping: memory_mapping,
-                num_threads: threads,
-                ..Default::default()
-            };
-
-            if daemon {
-                #[cfg(unix)]
-                {
-                    if let Err(e) = classify::run_daemon(&hash_file, &taxo_file, &opts_file, &opts) {
-                        eprintln!("Daemon error: {e}");
-                        process::exit(1);
-                    }
-                    return;
-                }
-                #[cfg(not(unix))]
-                {
-                    eprintln!("Daemon mode is only supported on Unix");
-                    process::exit(1);
-                }
+                report_minimizer_data,
+                memory_mapping,
+                use_names,
+                minimum_base_quality,
+                daemon,
+                input,
+            );
+            if let Err(e) = classify::classify_main(&args) {
+                eprintln!("Error: {e}");
+                process::exit(1);
             }
+        }
 
-            match classify::run_classify(
-                &input, &hash_file, &taxo_file, &opts_file, &opts,
-                output.as_deref(), classified_out.as_deref(),
-                unclassified_out.as_deref(), report.as_deref(),
-            ) {
-                Ok(stats) => {
-                    eprintln!(
-                        "{} sequences ({:.2}% classified)",
-                        stats.total_sequences,
-                        if stats.total_sequences > 0 {
-                            100.0 * stats.total_classified as f64 / stats.total_sequences as f64
-                        } else {
-                            0.0
-                        }
-                    );
-                }
+        Commands::Build {
+            hashtable,
+            taxonomy,
+            options,
+            id_map,
+            ncbi_taxonomy_dir,
+            kmer_len,
+            minimizer_len,
+            capacity,
+            max_capacity,
+            threads,
+            protein,
+            fast_build,
+            block_size,
+            subblock_size,
+            taxid_bits,
+            spaced_seed,
+            toggle_mask,
+        } => {
+            let args = build_db_args(
+                hashtable,
+                taxonomy,
+                options,
+                id_map,
+                ncbi_taxonomy_dir,
+                kmer_len,
+                minimizer_len,
+                capacity,
+                max_capacity,
+                threads,
+                protein,
+                fast_build,
+                block_size,
+                subblock_size,
+                taxid_bits,
+                spaced_seed,
+                toggle_mask,
+            );
+            if let Err(e) = build_db::build_db_main(&args) {
+                eprintln!("Error building database: {}", e);
+                process::exit(1);
+            }
+        }
+
+        Commands::Estimate {
+            kmer_len,
+            minimizer_len,
+            n,
+            protein,
+            threads,
+            block_size,
+            spaced_seed,
+            toggle_mask,
+        } => {
+            let args = estimate_args(
+                kmer_len,
+                minimizer_len,
+                n,
+                protein,
+                threads,
+                block_size,
+                spaced_seed,
+                toggle_mask,
+            );
+            match estimate::estimate_capacity_main(&args) {
+                Ok(capacity) => println!("{}", capacity),
                 Err(e) => {
                     eprintln!("Error: {}", e);
                     process::exit(1);
@@ -342,104 +598,34 @@ fn main() {
             }
         }
 
-        Commands::Build {
-            hashtable, taxonomy, options, id_map, ncbi_taxonomy_dir,
-            kmer_len, minimizer_len, capacity, max_capacity, threads,
-            protein, fast_build, block_size, subblock_size, taxid_bits,
-            spaced_seed, toggle_mask,
-        } => {
-            let mut spaced_seed_mask = DEFAULT_SPACED_SEED_MASK;
-            if let Some(ref s) = spaced_seed {
-                spaced_seed_mask = u64::from_str_radix(s, 2).expect("Invalid spaced seed mask");
-                let bits = if protein { BITS_PER_CHAR_PRO } else { BITS_PER_CHAR_DNA };
-                expand_spaced_seed_mask(&mut spaced_seed_mask, bits as i32);
-            }
-            let mut toggle = DEFAULT_TOGGLE_MASK;
-            if let Some(ref t) = toggle_mask {
-                toggle = u64::from_str_radix(t, 2).expect("Invalid toggle mask");
-            }
-
-            let mut opts = BuildOptions {
-                id_to_taxon_map_filename: id_map,
-                ncbi_taxonomy_directory: ncbi_taxonomy_dir,
-                hashtable_filename: hashtable,
-                options_filename: options,
-                taxonomy_filename: taxonomy,
-                block_size,
-                subblock_size,
-                requested_bits_for_taxid: taxid_bits,
-                num_threads: threads,
-                input_is_protein: protein,
-                k: kmer_len,
-                l: minimizer_len,
-                capacity,
-                maximum_capacity: max_capacity,
-                spaced_seed_mask,
-                toggle_mask: toggle,
-                deterministic_build: !fast_build,
-                ..Default::default()
-            };
-
-            if let Err(e) = build_db::build_database(&mut opts) {
-                eprintln!("Error building database: {}", e);
-                process::exit(1);
-            }
-        }
-
-        Commands::Estimate {
-            kmer_len, minimizer_len, n, protein, threads, block_size,
-            spaced_seed, toggle_mask,
-        } => {
-            let mut spaced_seed_mask = DEFAULT_SPACED_SEED_MASK;
-            if let Some(ref s) = spaced_seed {
-                spaced_seed_mask = u64::from_str_radix(s, 2).expect("Invalid spaced seed mask");
-                let bits = if protein { BITS_PER_CHAR_PRO } else { BITS_PER_CHAR_DNA };
-                expand_spaced_seed_mask(&mut spaced_seed_mask, bits as i32);
-            }
-            let mut toggle = DEFAULT_TOGGLE_MASK;
-            if let Some(ref t) = toggle_mask {
-                toggle = u64::from_str_radix(t, 2).expect("Invalid toggle mask");
-            }
-
-            let opts = EstimateOptions {
-                k: kmer_len,
-                l: minimizer_len,
-                n,
-                input_is_protein: protein,
-                threads,
-                block_size,
-                spaced_seed_mask,
-                toggle_mask: toggle,
-            };
-
-            match estimate::estimate_capacity(&opts) {
-                Ok(capacity) => println!("{}", capacity),
-                Err(e) => {
-                    eprintln!("Error estimating capacity: {}", e);
-                    process::exit(1);
-                }
-            }
-        }
-
         Commands::Inspect {
-            db, memory_mapping, skip_counts, use_mpa_style, report_zero_counts, threads: _,
+            db,
+            memory_mapping,
+            skip_counts,
+            use_mpa_style,
+            report_zero_counts,
+            threads: _,
         } => {
             let hash_file = format!("{}/hash.k2d", db);
             let taxo_file = format!("{}/taxo.k2d", db);
             let opts_file = format!("{}/opts.k2d", db);
 
             // Load taxonomy
-            let mut taxonomy = match kraken2::taxonomy::Taxonomy::from_file(&taxo_file, memory_mapping) {
-                Ok(t) => t,
-                Err(e) => {
-                    eprintln!("Error loading taxonomy: {}", e);
-                    process::exit(1);
-                }
-            };
+            let mut taxonomy =
+                match kraken2::taxonomy::Taxonomy::from_file(&taxo_file, memory_mapping) {
+                    Ok(t) => t,
+                    Err(e) => {
+                        eprintln!("Error loading taxonomy: {}", e);
+                        process::exit(1);
+                    }
+                };
             taxonomy.generate_external_to_internal_id_map();
 
             // Load hash table
-            let hash = match kraken2::compact_hash::CompactHashTable::from_file(&hash_file, memory_mapping) {
+            let hash = match kraken2::compact_hash::CompactHashTable::from_file(
+                &hash_file,
+                memory_mapping,
+            ) {
                 Ok(h) => h,
                 Err(e) => {
                     eprintln!("Error loading hash table: {}", e);
@@ -469,16 +655,32 @@ fn main() {
                 let total = value_counts.values().sum::<u64>();
                 if use_mpa_style {
                     let _ = kraken2::reports::report_mpa_style(
-                        "/dev/stdout", report_zero_counts, &taxonomy, &taxon_counters);
+                        "/dev/stdout",
+                        report_zero_counts,
+                        &taxonomy,
+                        &taxon_counters,
+                    );
                 } else {
                     let _ = kraken2::reports::report_kraken_style(
-                        "/dev/stdout", report_zero_counts, false,
-                        &taxonomy, &taxon_counters, total, 0);
+                        "/dev/stdout",
+                        report_zero_counts,
+                        false,
+                        &taxonomy,
+                        &taxon_counters,
+                        total,
+                        0,
+                    );
                 }
             }
         }
 
-        Commands::Download { db, taxonomy, library, protein, skip_maps } => {
+        Commands::Download {
+            db,
+            taxonomy,
+            library,
+            protein,
+            skip_maps,
+        } => {
             if taxonomy {
                 if let Err(e) = kraken2::download::download_taxonomy(&db, skip_maps, protein) {
                     eprintln!("Error downloading taxonomy: {e}");
@@ -504,11 +706,140 @@ fn main() {
             }
         }
 
-        Commands::Blast2fasta { input, output, include_taxid } => {
-            if let Err(e) = kraken2::blast::blast_to_fasta(&input, &output, include_taxid) {
+        Commands::Blast2fasta {
+            input,
+            output,
+            include_taxid,
+        } => {
+            let args = blast_to_fasta_args(input, output, include_taxid);
+            if let Err(e) = blast::blast_to_fasta_main(&args) {
                 eprintln!("Error converting BLAST database: {e}");
                 process::exit(1);
             }
         }
+
+        Commands::DumpTable { args } => {
+            let args = passthrough_args("dump_table", args);
+            if let Err(e) = dump_table::dump_table_main(&args) {
+                eprintln!("Error dumping table: {e}");
+                process::exit(1);
+            }
+        }
+
+        Commands::LookupAccessionNumbers { args } => {
+            let args = passthrough_args("lookup_accession_numbers", args);
+            if let Err(e) = lookup::lookup_accession_numbers_main(&args) {
+                eprintln!("Error looking up accession numbers: {e}");
+                process::exit(1);
+            }
+        }
+
+        Commands::K2mask { args } => {
+            let args = passthrough_args("k2mask", args);
+            if let Err(e) = dust::k2mask_main(&args) {
+                eprintln!("Error masking low-complexity sequence: {e}");
+                process::exit(1);
+            }
+        }
+
+        Commands::Mmtest => {
+            print!("{}", mmtest::mmtest_main());
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_classify_args_routes_to_translated_flags() {
+        let args = classify_args(
+            "db".to_string(),
+            4,
+            true,
+            0.2,
+            3,
+            true,
+            false,
+            Some("classified#.fq".to_string()),
+            Some("unclassified#.fq".to_string()),
+            Some("-".to_string()),
+            Some("report.txt".to_string()),
+            true,
+            true,
+            true,
+            true,
+            true,
+            7,
+            false,
+            vec!["reads.fq".to_string()],
+        );
+        assert_eq!(args[0], "classify");
+        assert!(args.contains(&"-H".to_string()));
+        assert!(args.contains(&"-m".to_string()));
+        assert!(args.contains(&"-K".to_string()));
+        assert!(args.contains(&"reads.fq".to_string()));
+    }
+
+    #[test]
+    fn test_build_db_args_routes_to_translated_flags() {
+        let args = build_db_args(
+            "hash.k2d".to_string(),
+            "taxo.k2d".to_string(),
+            "opts.k2d".to_string(),
+            "seqid.map".to_string(),
+            "taxonomy".to_string(),
+            35,
+            31,
+            1000,
+            500,
+            2,
+            true,
+            true,
+            4096,
+            512,
+            12,
+            Some("101".to_string()),
+            Some("11".to_string()),
+        );
+        assert_eq!(args[0], "build_db");
+        assert!(args.contains(&"-F".to_string()));
+        assert!(args.contains(&"-X".to_string()));
+        assert!(args.contains(&"-M".to_string()));
+    }
+
+    #[test]
+    fn test_estimate_args_routes_to_translated_flags() {
+        let args = estimate_args(
+            35,
+            31,
+            4,
+            true,
+            2,
+            4096,
+            Some("101".to_string()),
+            Some("11".to_string()),
+        );
+        assert_eq!(args[0], "estimate_capacity");
+        assert!(args.contains(&"-X".to_string()));
+        assert!(args.contains(&"-S".to_string()));
+        assert!(args.contains(&"-T".to_string()));
+    }
+
+    #[test]
+    fn test_blast_to_fasta_args_routes_to_translated_flags() {
+        let args =
+            blast_to_fasta_args("db/core_nt.00".to_string(), "out.fna".to_string(), true);
+        assert_eq!(args[0], "blast_to_fasta");
+        assert!(args.contains(&"-o".to_string()));
+        assert!(args.contains(&"-t".to_string()));
+        assert!(args.contains(&"db/core_nt.00".to_string()));
+    }
+
+    #[test]
+    fn test_passthrough_args_prefixes_program_name() {
+        let args = passthrough_args("dump_table", vec!["-H".to_string(), "hash".to_string()]);
+        assert_eq!(args, vec!["dump_table", "-H", "hash"]);
     }
 }

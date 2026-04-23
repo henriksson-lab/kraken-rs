@@ -1,9 +1,9 @@
-use std::collections::{BTreeMap, BTreeSet, VecDeque};
-use ahash::AHashMap as HashMap;
-use std::fs::File;
-use std::io::{self, BufRead, BufReader, Read, Write};
 use crate::mmap_file::MMapFile;
 use crate::types::TaxonomyNode;
+use ahash::AHashMap as HashMap;
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
+use std::fs::File;
+use std::io::{self, BufRead, BufReader, Read, Write};
 
 /// Magic header for the binary taxonomy file format.
 /// C++ writes strlen("K2TAXDAT") = 8 bytes (no null terminator on disk).
@@ -58,7 +58,10 @@ impl NCBITaxonomy {
                 }
 
                 let (token, next_pos) = if let Some(pos2) = line[pos1..].find(delim) {
-                    (line[pos1..pos1 + pos2].to_string(), Some(pos1 + pos2 + delim.len()))
+                    (
+                        line[pos1..pos1 + pos2].to_string(),
+                        Some(pos1 + pos2 + delim.len()),
+                    )
                 } else {
                     (line[pos1..].to_string(), None)
                 };
@@ -114,7 +117,10 @@ impl NCBITaxonomy {
                 }
 
                 let (token, next_pos) = if let Some(pos2) = line[pos1..].find(delim) {
-                    (line[pos1..pos1 + pos2].to_string(), Some(pos1 + pos2 + delim.len()))
+                    (
+                        line[pos1..pos1 + pos2].to_string(),
+                        Some(pos1 + pos2 + delim.len()),
+                    )
                 } else {
                     (line[pos1..].to_string(), None)
                 };
@@ -189,7 +195,11 @@ impl NCBITaxonomy {
             let parent_ext = self.parent_map.get(&external_node_id).copied().unwrap_or(0);
             let parent_int = external_id_map.get(&parent_ext).copied().unwrap_or(0);
 
-            let rank = self.rank_map.get(&external_node_id).map(|s| s.as_str()).unwrap_or("");
+            let rank = self
+                .rank_map
+                .get(&external_node_id)
+                .map(|s| s.as_str())
+                .unwrap_or("");
             let rank_offset = rank_offsets.get(rank).copied().unwrap_or(0);
 
             let name_offset = name_data.len() as u64;
@@ -216,7 +226,11 @@ impl NCBITaxonomy {
                 godparent_id: 0,
             };
 
-            let name = self.name_map.get(&external_node_id).map(|s| s.as_str()).unwrap_or("");
+            let name = self
+                .name_map
+                .get(&external_node_id)
+                .map(|s| s.as_str())
+                .unwrap_or("");
             name_data.extend_from_slice(name.as_bytes());
             name_data.push(0); // null terminator
         }
@@ -253,6 +267,10 @@ impl Taxonomy {
         }
     }
 
+    pub fn from_cstr(filename: &str, memory_mapping: bool) -> io::Result<Self> {
+        Self::from_file(filename, memory_mapping)
+    }
+
     fn from_file_read(filename: &str) -> io::Result<Self> {
         let mut file = File::open(filename)?;
 
@@ -260,8 +278,10 @@ impl Taxonomy {
         let mut magic = vec![0u8; FILE_MAGIC.len()];
         file.read_exact(&mut magic)?;
         if magic != FILE_MAGIC {
-            return Err(io::Error::new(io::ErrorKind::InvalidData,
-                format!("malformed taxonomy file {}", filename)));
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("malformed taxonomy file {}", filename),
+            ));
         }
 
         // Read header
@@ -306,8 +326,10 @@ impl Taxonomy {
         let data = mmap.as_slice();
 
         if data.len() < FILE_MAGIC.len() || &data[..FILE_MAGIC.len()] != FILE_MAGIC {
-            return Err(io::Error::new(io::ErrorKind::InvalidData,
-                format!("malformed taxonomy file {}", filename)));
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("malformed taxonomy file {}", filename),
+            ));
         }
 
         let mut offset = FILE_MAGIC.len();
@@ -390,13 +412,17 @@ impl Taxonomy {
         self.external_to_internal_id_map.clear();
         self.external_to_internal_id_map.insert(0, 0);
         for i in 1..self.nodes.len() {
-            self.external_to_internal_id_map.insert(self.nodes[i].external_id, i as u64);
+            self.external_to_internal_id_map
+                .insert(self.nodes[i].external_id, i as u64);
         }
     }
 
     /// Look up an internal ID from an external (NCBI) ID.
     pub fn get_internal_id(&self, external_id: u64) -> u64 {
-        self.external_to_internal_id_map.get(&external_id).copied().unwrap_or(0)
+        self.external_to_internal_id_map
+            .get(&external_id)
+            .copied()
+            .unwrap_or(0)
     }
 
     /// Check if node A is an ancestor of node B (using internal IDs).
@@ -460,7 +486,9 @@ impl Taxonomy {
         if start >= self.name_data.len() {
             return "";
         }
-        let end = self.name_data[start..].iter().position(|&b| b == 0)
+        let end = self.name_data[start..]
+            .iter()
+            .position(|&b| b == 0)
             .map(|p| p + start)
             .unwrap_or(self.name_data.len());
         std::str::from_utf8(&self.name_data[start..end]).unwrap_or("")
@@ -472,7 +500,9 @@ impl Taxonomy {
         if start >= self.rank_data.len() {
             return "";
         }
-        let end = self.rank_data[start..].iter().position(|&b| b == 0)
+        let end = self.rank_data[start..]
+            .iter()
+            .position(|&b| b == 0)
             .map(|p| p + start)
             .unwrap_or(self.rank_data.len());
         std::str::from_utf8(&self.rank_data[start..end]).unwrap_or("")
@@ -487,6 +517,8 @@ impl Taxonomy {
     pub fn rank_data(&self) -> &[u8] {
         &self.rank_data
     }
+
+    pub fn destroy(self) {}
 }
 
 impl Default for Taxonomy {
@@ -494,6 +526,105 @@ impl Default for Taxonomy {
         Self::new()
     }
 }
+
+pub fn init_taxonomy(filename: &str) -> io::Result<Taxonomy> {
+    let mut taxonomy = Taxonomy::from_file(filename, false)?;
+    taxonomy.generate_external_to_internal_id_map();
+    Ok(taxonomy)
+}
+
+pub fn get_lca(t: &Taxonomy, a: u64, b: u64) -> u64 {
+    let internal_a = t.get_internal_id(a);
+    let internal_b = t.get_internal_id(b);
+    let internal_lca = t.lowest_common_ancestor(internal_a, internal_b);
+    t.nodes()[internal_lca as usize].external_id
+}
+
+pub fn get_parent_id(t: &Taxonomy, taxid: u64) -> u64 {
+    let internal_taxid = t.get_internal_id(taxid);
+    let internal_parent = t.nodes()[internal_taxid as usize].parent_id;
+    t.nodes()[internal_parent as usize].external_id
+}
+
+pub fn is_ancestor_of(t: &Taxonomy, parent: u64, child: u64) -> bool {
+    let internal_parent = t.get_internal_id(parent);
+    let internal_child = t.get_internal_id(child);
+    t.is_a_ancestor_of_b(internal_parent, internal_child)
+}
+
+pub fn get_internal_taxid(t: &Taxonomy, external_id: u64) -> u64 {
+    t.get_internal_id(external_id)
+}
+
+pub fn get_rank(t: &Taxonomy, external_id: u64) -> &str {
+    let internal_id = get_internal_taxid(t, external_id);
+    t.rank_at_offset(t.nodes()[internal_id as usize].rank_offset)
+}
+
+pub fn taxid_to_name(t: &Taxonomy, external_id: u64) -> &str {
+    let internal_id = get_internal_taxid(t, external_id);
+    t.name_at_offset(t.nodes()[internal_id as usize].name_offset)
+}
+
+pub fn get_child_count(t: &Taxonomy, external_id: u64) -> u64 {
+    let internal_id = get_internal_taxid(t, external_id);
+    t.nodes()[internal_id as usize].child_count
+}
+
+pub fn get_child_taxids(
+    t: &Taxonomy,
+    parent_taxid: u64,
+    child_taxids: &mut [u64],
+    num_children: u64,
+) {
+    let internal_id = get_internal_taxid(t, parent_taxid);
+    for i in 0..num_children as usize {
+        let taxid = t.nodes()[internal_id as usize].first_child + i as u64;
+        child_taxids[i] = t.nodes()[taxid as usize].external_id;
+    }
+}
+
+pub fn write_to_disk_libtax(t: &Taxonomy, filename: &str) -> io::Result<()> {
+    t.write_to_disk(filename)
+}
+
+pub fn read_id_to_taxon_map(id_map: &mut BTreeMap<String, u64>, filename: &str) -> io::Result<()> {
+    let map_file = BufReader::new(File::open(filename)?);
+    for line in map_file.lines() {
+        let line = line?;
+        let mut fields = line.split_whitespace();
+        let Some(seq_id) = fields.next() else {
+            continue;
+        };
+        let Some(taxid_text) = fields.next() else {
+            continue;
+        };
+        let taxid = taxid_text.parse::<u64>().unwrap_or(0);
+        if taxid != 0 {
+            id_map.insert(seq_id.to_string(), taxid);
+        }
+    }
+    Ok(())
+}
+
+pub fn generate_taxonomy_libtax(
+    names: &str,
+    nodes: &str,
+    seqid2taxid: &str,
+    taxon_filename: &str,
+) -> io::Result<()> {
+    let mut ncbi_taxonomy = NCBITaxonomy::new(nodes, names)?;
+    let mut id_map = BTreeMap::new();
+    read_id_to_taxon_map(&mut id_map, seqid2taxid)?;
+    for (_, taxid) in id_map {
+        if taxid != 0 {
+            ncbi_taxonomy.mark_node(taxid);
+        }
+    }
+    ncbi_taxonomy.convert_to_kraken_taxonomy(taxon_filename)
+}
+
+pub fn destroy_taxonomy(_t: Taxonomy) {}
 
 #[cfg(test)]
 mod tests {
@@ -541,7 +672,10 @@ mod tests {
         let rust_taxo_file = tmp_dir.path().join("rust_taxo.k2d");
 
         // Create same seqid2taxid map used for reference generation
-        let ref_map = format!("{}/tests/reference/seqid2taxid.map", env!("CARGO_MANIFEST_DIR"));
+        let ref_map = format!(
+            "{}/tests/reference/seqid2taxid.map",
+            env!("CARGO_MANIFEST_DIR")
+        );
         std::fs::copy(&ref_map, &seqid2taxid).unwrap();
 
         // Generate via Rust
@@ -558,14 +692,24 @@ mod tests {
                 }
             }
         }
-        ncbi_tax.convert_to_kraken_taxonomy(rust_taxo_file.to_str().unwrap()).unwrap();
+        ncbi_tax
+            .convert_to_kraken_taxonomy(rust_taxo_file.to_str().unwrap())
+            .unwrap();
 
         // Compare against C++ reference
         let ref_bytes = std::fs::read(&ref_path).unwrap();
         let rust_bytes = std::fs::read(&rust_taxo_file).unwrap();
-        assert_eq!(ref_bytes.len(), rust_bytes.len(),
-            "Taxonomy size mismatch: ref={}, rust={}", ref_bytes.len(), rust_bytes.len());
-        assert_eq!(ref_bytes, rust_bytes, "Taxonomy files differ from C++ reference");
+        assert_eq!(
+            ref_bytes.len(),
+            rust_bytes.len(),
+            "Taxonomy size mismatch: ref={}, rust={}",
+            ref_bytes.len(),
+            rust_bytes.len()
+        );
+        assert_eq!(
+            ref_bytes, rust_bytes,
+            "Taxonomy files differ from C++ reference"
+        );
     }
 
     #[test]
@@ -600,5 +744,48 @@ mod tests {
             let parent = tax.node(i).parent_id;
             assert_eq!(tax.lowest_common_ancestor(i, parent), parent);
         }
+    }
+
+    #[test]
+    fn test_libtax_helpers() {
+        let ref_path = format!("{}/tests/reference/taxo.k2d", env!("CARGO_MANIFEST_DIR"));
+        if !std::path::Path::new(&ref_path).exists() {
+            eprintln!("Skipping: reference data not available");
+            return;
+        }
+
+        let tax = init_taxonomy(&ref_path).unwrap();
+        assert_eq!(get_lca(&tax, 1, 1), 1);
+        assert_eq!(get_parent_id(&tax, 1), 0);
+        assert!(is_ancestor_of(&tax, 1, 1));
+        assert_eq!(get_internal_taxid(&tax, 1), 1);
+        assert!(!get_rank(&tax, 1).is_empty());
+        assert!(!taxid_to_name(&tax, 1).is_empty());
+        let _ = get_child_count(&tax, 1);
+    }
+
+    #[test]
+    fn test_read_id_to_taxon_map_and_get_child_taxids() {
+        let tmp_dir = tempfile::tempdir().unwrap();
+        let map_path = tmp_dir.path().join("seqid2taxid.map");
+        std::fs::write(&map_path, "seq1\t10\nseq2 0\nseq3\t20\n").unwrap();
+
+        let mut id_map = BTreeMap::new();
+        read_id_to_taxon_map(&mut id_map, map_path.to_str().unwrap()).unwrap();
+        assert_eq!(id_map.get("seq1"), Some(&10));
+        assert!(!id_map.contains_key("seq2"));
+        assert_eq!(id_map.get("seq3"), Some(&20));
+
+        let ref_path = format!("{}/tests/reference/taxo.k2d", env!("CARGO_MANIFEST_DIR"));
+        if !std::path::Path::new(&ref_path).exists() {
+            eprintln!("Skipping taxonomy child test: reference data not available");
+            return;
+        }
+
+        let tax = init_taxonomy(&ref_path).unwrap();
+        let child_count = get_child_count(&tax, 1);
+        let mut child_taxids = vec![0u64; child_count as usize];
+        get_child_taxids(&tax, 1, &mut child_taxids, child_count);
+        assert_eq!(child_taxids.len(), child_count as usize);
     }
 }

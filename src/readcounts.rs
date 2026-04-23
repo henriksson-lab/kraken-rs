@@ -1,5 +1,5 @@
-use std::collections::HashSet;
 use crate::hyperloglog::HyperLogLogPlusMinus;
+use std::collections::HashSet;
 
 /// ReadCounts with HyperLogLog for distinct k-mer estimation (default mode).
 #[derive(Clone, Default)]

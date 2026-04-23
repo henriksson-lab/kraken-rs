@@ -33,8 +33,12 @@ mod tests {
     #[test]
     fn test_murmurhash3_known_values() {
         for &(key, expected) in REFERENCE {
-            assert_eq!(murmurhash3(key), expected,
-                "MurmurHash3 mismatch for key {}", key);
+            assert_eq!(
+                murmurhash3(key),
+                expected,
+                "MurmurHash3 mismatch for key {}",
+                key
+            );
         }
     }
 

@@ -1,5 +1,5 @@
-use std::collections::VecDeque;
 use crate::types::*;
+use std::collections::VecDeque;
 
 struct MinimizerData {
     candidate: u64,
@@ -39,7 +39,11 @@ impl MinimizerScanner {
         toggle_mask: u64,
         revcom_version: i32,
     ) -> Self {
-        let bits_per_char = if dna { BITS_PER_CHAR_DNA } else { BITS_PER_CHAR_PRO };
+        let bits_per_char = if dna {
+            BITS_PER_CHAR_DNA
+        } else {
+            BITS_PER_CHAR_PRO
+        };
 
         let mut lmer_mask: u64 = 1;
         lmer_mask <<= l as u64 * bits_per_char as u64;
@@ -137,7 +141,11 @@ impl MinimizerScanner {
             return None;
         }
 
-        let bits_per_char = if self.dna { BITS_PER_CHAR_DNA } else { BITS_PER_CHAR_PRO };
+        let bits_per_char = if self.dna {
+            BITS_PER_CHAR_DNA
+        } else {
+            BITS_PER_CHAR_PRO
+        };
         let ambig_code: u64 = (1u64 << bits_per_char) - 1;
         let mut changed_minimizer = false;
 
@@ -153,7 +161,9 @@ impl MinimizerScanner {
 
                 // Safety: str_pos < finish <= seq.len(), and lookup_table has 256 entries covering all u8
                 let lookup_code = unsafe {
-                    *self.lookup_table.get_unchecked(*self.seq.get_unchecked(self.str_pos) as usize)
+                    *self
+                        .lookup_table
+                        .get_unchecked(*self.seq.get_unchecked(self.str_pos) as usize)
                 };
                 self.str_pos += 1;
 
@@ -242,14 +252,10 @@ impl MinimizerScanner {
     /// Exact port of C++ `MinimizerScanner::reverse_complement()`.
     fn reverse_complement(&self, mut kmer: u64, n: u8) -> u64 {
         // Reverse bit pairs
-        kmer = ((kmer & 0xCCCCCCCCCCCCCCCC) >> 2)
-             | ((kmer & 0x3333333333333333) << 2);
-        kmer = ((kmer & 0xF0F0F0F0F0F0F0F0) >> 4)
-             | ((kmer & 0x0F0F0F0F0F0F0F0F) << 4);
-        kmer = ((kmer & 0xFF00FF00FF00FF00) >> 8)
-             | ((kmer & 0x00FF00FF00FF00FF) << 8);
-        kmer = ((kmer & 0xFFFF0000FFFF0000) >> 16)
-             | ((kmer & 0x0000FFFF0000FFFF) << 16);
+        kmer = ((kmer & 0xCCCCCCCCCCCCCCCC) >> 2) | ((kmer & 0x3333333333333333) << 2);
+        kmer = ((kmer & 0xF0F0F0F0F0F0F0F0) >> 4) | ((kmer & 0x0F0F0F0F0F0F0F0F) << 4);
+        kmer = ((kmer & 0xFF00FF00FF00FF00) >> 8) | ((kmer & 0x00FF00FF00FF00FF) << 8);
+        kmer = ((kmer & 0xFFFF0000FFFF0000) >> 16) | ((kmer & 0x0000FFFF0000FFFF) << 16);
         kmer = kmer.rotate_left(32);
 
         // Complement
@@ -263,7 +269,11 @@ impl MinimizerScanner {
     /// Canonical representation = min(kmer, reverse_complement(kmer)).
     fn canonical_representation(&self, kmer: u64, n: u8) -> u64 {
         let revcom = self.reverse_complement(kmer, n);
-        if kmer < revcom { kmer } else { revcom }
+        if kmer < revcom {
+            kmer
+        } else {
+            revcom
+        }
     }
 }
 
@@ -273,8 +283,12 @@ mod tests {
 
     fn collect_minimizers(seq: &str, k: isize, l: isize) -> (Vec<u64>, Vec<bool>) {
         let mut scanner = MinimizerScanner::new(
-            k, l, DEFAULT_SPACED_SEED_MASK, true,
-            DEFAULT_TOGGLE_MASK, CURRENT_REVCOM_VERSION,
+            k,
+            l,
+            DEFAULT_SPACED_SEED_MASK,
+            true,
+            DEFAULT_TOGGLE_MASK,
+            CURRENT_REVCOM_VERSION,
         );
         scanner.load_sequence(seq, 0, usize::MAX);
         let mut mins = Vec::new();
@@ -290,7 +304,10 @@ mod tests {
     fn test_minimizer_produces_output() {
         let seq = "ACGATCGACGACGATCGATCGATCGATCGATCGATCGATCG";
         let (mins, _) = collect_minimizers(seq, 10, 5);
-        assert!(!mins.is_empty(), "Should produce minimizers for a 41-char sequence with k=10 l=5");
+        assert!(
+            !mins.is_empty(),
+            "Should produce minimizers for a 41-char sequence with k=10 l=5"
+        );
     }
 
     #[test]
@@ -310,10 +327,16 @@ mod tests {
         let (mins, ambs) = collect_minimizers(seq, 10, 5);
         assert!(!mins.is_empty());
         // First minimizers should be ambiguous (N's at start)
-        assert!(ambs[0], "First minimizer should be ambiguous due to leading N's");
+        assert!(
+            ambs[0],
+            "First minimizer should be ambiguous due to leading N's"
+        );
         // Later minimizers should not be ambiguous
         let first_clear = ambs.iter().position(|&a| !a);
-        assert!(first_clear.is_some(), "Should have some non-ambiguous minimizers");
+        assert!(
+            first_clear.is_some(),
+            "Should have some non-ambiguous minimizers"
+        );
     }
 
     #[test]
@@ -347,8 +370,13 @@ mod tests {
         let k = 10isize;
         let l = 5isize;
         let (mins, _) = collect_minimizers(seq, k, l);
-        assert_eq!(mins.len(), seq.len() - k as usize + 1,
-            "Expected {} minimizers, got {}", seq.len() - k as usize + 1, mins.len());
+        assert_eq!(
+            mins.len(),
+            seq.len() - k as usize + 1,
+            "Expected {} minimizers, got {}",
+            seq.len() - k as usize + 1,
+            mins.len()
+        );
     }
 
     #[test]

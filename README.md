@@ -4,7 +4,8 @@ A Rust port of [Kraken 2](https://github.com/DerrickWood/kraken2) — a taxonomi
 
 This crate provides both a command-line tool and a library for classifying biological sequences against a Kraken 2 database.
 
-**this crate is not ready for use yet. do not trust below**
+* 2026-04-23: Possibly ready for real world data. If you decide to use it, ensure to compare the output on our own data with the original Kraken 2 software, as bugs may still remain
+* Possibly about 10% faster than the original (on par)
 
 ## This is an LLM-mediated faithful (hopefully) translation, not the original code! 
 
@@ -23,7 +24,7 @@ But:
 
 * **This approach should still be considered experimental**. The LLM technology is immature and has sharp corners. But there are opportunities to reap, and the genie is not going back into the bottle. This translation is as much aimed to learn how to improve the technology and get feedback on the results.
 * Translations are not endorsed by the original authors unless otherwise noted. **Do not send bug reports to the original developers**. Use our Github issues page instead.
-* **Do not trust the benchmarks on this page**. They are used to help evaluate the translation. If you want improved performance, you generally have to use this code as a library, and use the additional tricks it offers. We generally accept performance losses in order to reduce our dependency issues
+* **Do not treat any benchmark here as a general performance claim**. They are used to evaluate the translation on specific workloads. Current measurements are kept in [BENCHMARKS.md](BENCHMARKS.md), and the current `classify` comparison is a fair optimized-build benchmark for this repository rather than a marketing number
 * **Check the original Github pages for information about the package**. This README is kept sparse on purpose. It is not meant to be the primary source of information
 * **If you are the author of the original code and wish to move to Rust, you can obtain ownership of this repository and crate**. Until then, our commitment is to offer an as-faithful-as-possible translation of a snapshot of your code. If we find serious bugs, we will report them to you. Otherwise we will just replicate them, to ensure comparability across studies that claim to use package XYZ v.666. Think of this like a fancy Ubuntu .deb-package of your software - that is how we treat it
 
@@ -47,12 +48,6 @@ For best performance, build with native CPU optimizations:
 ```bash
 RUSTFLAGS="-C target-cpu=native" cargo build --release
 ```
-
-### Build Requirements
-
-- Rust toolchain (1.70+)
-
-No C/C++ compiler required.
 
 ## CLI Usage
 
@@ -200,21 +195,19 @@ while let Some(minimizer) = scanner.next_minimizer() {
 }
 ```
 
-## Benchmarks
-
-Classification of 19,000 viral sequences (109.7 MB) against a test database (38 reference genomes), on x86_64 Linux (40 cores):
-
-| Threads | C++ (median) | Rust (median) | Speedup |
-|---------|-------------|---------------|---------|
-| 1 | 14,083 ms | 12,433 ms | **1.13x** |
-| 4 | 3,938 ms | 3,362 ms | **1.17x** |
-| 8 | 2,148 ms | 1,903 ms | **1.13x** |
-
-Rust is 13-17% faster than the original C++ across all thread counts.
-
-*Benchmarked with `RUSTFLAGS="-C target-cpu=native"`. Database: 38 viral genomes, k=35, l=31.*
-
 ## Output Format
+
+## Benchmark Notes
+
+The current stored benchmark is in [BENCHMARKS.md](BENCHMARKS.md).
+
+At the moment, the most recent real-data `classify` benchmark on a `600,000` read-pair subset from `/husky/henriksson/atrandi/rawdata/241206_novaseq_wgs3/filtered` shows Rust slightly faster than the original C++ on the repository reference DB:
+
+- `-p 1`: C++ `22.54 s`, Rust `19.68 s`
+- `-p 4`: C++ `6.73 s`, Rust `5.82 s`
+- peak RSS on a measured `-p 4` run: C++ `187,568 kB`, Rust `59,812 kB` (`68.1%` less for Rust)
+
+Those numbers are specific to that workload and should be read as translation-evaluation data, not as a blanket speed claim. For this repository they are a fair benchmark: both sides used normal optimized builds, neither side used `-march=native`, and checking Rust with and without LTO showed only a small effect.
 
 The classification output follows the standard Kraken 2 format:
 
@@ -246,4 +239,4 @@ The library API accepts `Read` trait objects, so it integrates naturally with an
 
 ## License
 
-MIT
+MIT (derived from the original source)

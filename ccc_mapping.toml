@@ -1,0 +1,1944 @@
+# Explicit Rust-to-original function mapping for code-complexity-comparator.
+#
+# The original Kraken 2 sources live under kraken2/. Path and line pins are
+# used where names are overloaded (for example multiple main, reset, clz, and
+# ProcessSequence functions). Keep this file in sync when translating more
+# original functions so ccc-rs does not fall back to fragile fingerprint pairs.
+
+[[entries]]
+rust = "murmurhash3"
+rust_path = "src/hash.rs"
+other = "MurmurHash3"
+other_path = "kraken2/src/kv_store.h"
+
+[[entries]]
+rust = "expand_spaced_seed_mask"
+rust_path = "src/utilities.rs"
+other = "ExpandSpacedSeedMask"
+other_path = "kraken2/src/utilities.cc"
+
+[[entries]]
+rust = "split_string"
+rust_path = "src/utilities.rs"
+other = "SplitString"
+other_path = "kraken2/src/utilities.cc"
+
+[[entries]]
+rust = "translate_to_all_frames"
+rust_path = "src/aa_translate.rs"
+other = "TranslateToAllFrames"
+other_path = "kraken2/src/aa_translate.cc"
+
+[[entries]]
+rust = "value"
+rust_path = "src/types.rs"
+rust_class = "CompactHashCell"
+other = "value"
+other_path = "kraken2/src/compact_hash.h"
+
+[[entries]]
+rust = "populate"
+rust_path = "src/types.rs"
+rust_class = "CompactHashCell"
+other = "populate"
+other_path = "kraken2/src/compact_hash.h"
+
+[[entries]]
+rust = "to_fasta_string"
+rust_path = "src/types.rs"
+rust_class = "Sequence"
+other = "Sequence::to_string"
+other_path = "kraken2/src/seqreader.cc"
+
+[[entries]]
+rust = "new"
+rust_path = "src/seq.rs"
+rust_class = "BatchSequenceReader"
+other = "BatchSequenceReader"
+other_path = "kraken2/src/seqreader.h"
+
+[[entries]]
+rust = "load_block"
+rust_path = "src/seq.rs"
+rust_class = "BatchSequenceReader"
+other = "LoadBlock"
+other_path = "kraken2/src/seqreader.h"
+
+[[entries]]
+rust = "next_sequence"
+rust_path = "src/seq.rs"
+rust_class = "BatchSequenceReader"
+other = "NextSequence"
+other_path = "kraken2/src/seqreader.h"
+other_line = 113
+
+[[entries]]
+rust = "load_batch"
+rust_path = "src/seq.rs"
+rust_class = "BatchSequenceReader"
+other = "LoadBatch"
+other_path = "kraken2/src/seqreader.h"
+
+[[entries]]
+rust = "file_format"
+rust_path = "src/seq.rs"
+rust_class = "BatchSequenceReader"
+other = "file_format"
+other_path = "kraken2/src/seqreader.h"
+
+[[entries]]
+rust = "new"
+rust_path = "src/mmap_file.rs"
+rust_class = "MMapFile"
+other = "MMapFile::MMapFile"
+other_path = "kraken2/src/mmap_file.cc"
+
+[[entries]]
+rust = "open_read_only"
+rust_path = "src/mmap_file.rs"
+rust_class = "MMapFile"
+other = "MMapFile::OpenFile"
+other_path = "kraken2/src/mmap_file.cc"
+other_line = 20
+
+[[entries]]
+rust = "open_read_write"
+rust_path = "src/mmap_file.rs"
+rust_class = "MMapFile"
+other = "MMapFile::OpenFile"
+other_path = "kraken2/src/mmap_file.cc"
+other_line = 27
+
+[[entries]]
+rust = "fptr"
+rust_path = "src/mmap_file.rs"
+rust_class = "MMapFile"
+other = "MMapFile::fptr"
+other_path = "kraken2/src/mmap_file.cc"
+
+[[entries]]
+rust = "filesize"
+rust_path = "src/mmap_file.rs"
+rust_class = "MMapFile"
+other = "MMapFile::filesize"
+other_path = "kraken2/src/mmap_file.cc"
+
+[[entries]]
+rust = "load_file"
+rust_path = "src/mmap_file.rs"
+rust_class = "MMapFile"
+other = "MMapFile::LoadFile"
+other_path = "kraken2/src/mmap_file.cc"
+
+[[entries]]
+rust = "sync_file"
+rust_path = "src/mmap_file.rs"
+rust_class = "MMapFile"
+other = "MMapFile::SyncFile"
+other_path = "kraken2/src/mmap_file.cc"
+
+[[entries]]
+rust = "new"
+rust_path = "src/minimizer.rs"
+rust_class = "MinimizerScanner"
+other = "MinimizerScanner::MinimizerScanner"
+other_path = "kraken2/src/mmscanner.cc"
+
+[[entries]]
+rust = "set_lookup"
+rust_path = "src/minimizer.rs"
+rust_class = "MinimizerScanner"
+other = "MinimizerScanner::set_lookup_table_character"
+other_path = "kraken2/src/mmscanner.cc"
+
+[[entries]]
+rust = "load_sequence"
+rust_path = "src/minimizer.rs"
+rust_class = "MinimizerScanner"
+other = "MinimizerScanner::LoadSequence"
+other_path = "kraken2/src/mmscanner.cc"
+
+[[entries]]
+rust = "next_minimizer"
+rust_path = "src/minimizer.rs"
+rust_class = "MinimizerScanner"
+other = "MinimizerScanner::NextMinimizer"
+other_path = "kraken2/src/mmscanner.cc"
+
+[[entries]]
+rust = "reverse_complement"
+rust_path = "src/minimizer.rs"
+rust_class = "MinimizerScanner"
+other = "MinimizerScanner::reverse_complement"
+other_path = "kraken2/src/mmscanner.cc"
+
+[[entries]]
+rust = "canonical_representation"
+rust_path = "src/minimizer.rs"
+rust_class = "MinimizerScanner"
+other = "MinimizerScanner::canonical_representation"
+other_path = "kraken2/src/mmscanner.cc"
+
+[[entries]]
+rust = "new"
+rust_path = "src/compact_hash.rs"
+rust_class = "CompactHashTable"
+other = "CompactHashTable::CompactHashTable"
+other_path = "kraken2/src/compact_hash.cc"
+other_line = 15
+
+[[entries]]
+rust = "from_file"
+rust_path = "src/compact_hash.rs"
+rust_class = "CompactHashTable"
+other = "CompactHashTable::CompactHashTable"
+other_path = "kraken2/src/compact_hash.cc"
+other_line = 40
+
+[[entries]]
+rust = "from_cstr"
+rust_path = "src/compact_hash.rs"
+rust_class = "CompactHashTable"
+other = "CompactHashTable::CompactHashTable"
+other_path = "kraken2/src/compact_hash.cc"
+other_line = 44
+
+[[entries]]
+rust = "destroy"
+rust_path = "src/compact_hash.rs"
+rust_class = "CompactHashTable"
+other = "CompactHashTable::~CompactHashTable"
+other_path = "kraken2/src/compact_hash.cc"
+
+[[entries]]
+rust = "from_file_read"
+rust_path = "src/compact_hash.rs"
+rust_class = "CompactHashTable"
+other = "CompactHashTable::LoadTable"
+other_path = "kraken2/src/compact_hash.cc"
+
+[[entries]]
+rust = "write_table"
+rust_path = "src/compact_hash.rs"
+rust_class = "CompactHashTable"
+other = "CompactHashTable::WriteTable"
+other_path = "kraken2/src/compact_hash.cc"
+
+[[entries]]
+rust = "get"
+rust_path = "src/compact_hash.rs"
+rust_class = "CompactHashTable"
+other = "CompactHashTable::Get"
+other_path = "kraken2/src/compact_hash.cc"
+
+[[entries]]
+rust = "find_index"
+rust_path = "src/compact_hash.rs"
+rust_class = "CompactHashTable"
+other = "CompactHashTable::FindIndex"
+other_path = "kraken2/src/compact_hash.cc"
+
+[[entries]]
+rust = "compare_and_set"
+rust_path = "src/compact_hash.rs"
+rust_class = "CompactHashTable"
+other = "CompactHashTable::CompareAndSet"
+other_path = "kraken2/src/compact_hash.cc"
+
+[[entries]]
+rust = "direct_compare_and_set"
+rust_path = "src/compact_hash.rs"
+rust_class = "CompactHashTable"
+other = "CompactHashTable::DirectCompareAndSet"
+other_path = "kraken2/src/compact_hash.cc"
+
+[[entries]]
+rust = "get_value_counts"
+rust_path = "src/compact_hash.rs"
+rust_class = "CompactHashTable"
+other = "CompactHashTable::GetValueCounts"
+other_path = "kraken2/src/compact_hash.cc"
+
+[[entries]]
+rust = "second_hash"
+rust_path = "src/compact_hash.rs"
+rust_class = "CompactHashTable"
+other = "CompactHashTable::second_hash"
+other_path = "kraken2/src/compact_hash.cc"
+
+[[entries]]
+rust = "new"
+rust_path = "src/taxonomy.rs"
+rust_class = "NCBITaxonomy"
+other = "NCBITaxonomy::NCBITaxonomy"
+other_path = "kraken2/src/taxonomy.cc"
+
+[[entries]]
+rust = "mark_node"
+rust_path = "src/taxonomy.rs"
+rust_class = "NCBITaxonomy"
+other = "NCBITaxonomy::MarkNode"
+other_path = "kraken2/src/taxonomy.cc"
+
+[[entries]]
+rust = "convert_to_kraken_taxonomy"
+rust_path = "src/taxonomy.rs"
+rust_class = "NCBITaxonomy"
+other = "NCBITaxonomy::ConvertToKrakenTaxonomy"
+other_path = "kraken2/src/taxonomy.cc"
+
+[[entries]]
+rust = "from_file"
+rust_path = "src/taxonomy.rs"
+rust_class = "Taxonomy"
+other = "Taxonomy::Taxonomy"
+other_path = "kraken2/src/taxonomy.cc"
+other_line = 187
+
+[[entries]]
+rust = "from_cstr"
+rust_path = "src/taxonomy.rs"
+rust_class = "Taxonomy"
+other = "Taxonomy::Taxonomy"
+other_path = "kraken2/src/taxonomy.cc"
+other_line = 191
+
+[[entries]]
+rust = "destroy"
+rust_path = "src/taxonomy.rs"
+rust_class = "Taxonomy"
+other = "Taxonomy::~Taxonomy"
+other_path = "kraken2/src/taxonomy.cc"
+
+[[entries]]
+rust = "from_file_read"
+rust_path = "src/taxonomy.rs"
+rust_class = "Taxonomy"
+other = "Taxonomy::Init"
+other_path = "kraken2/src/taxonomy.cc"
+
+[[entries]]
+rust = "write_to_disk"
+rust_path = "src/taxonomy.rs"
+rust_class = "Taxonomy"
+other = "Taxonomy::WriteToDisk"
+other_path = "kraken2/src/taxonomy.cc"
+
+[[entries]]
+rust = "generate_external_to_internal_id_map"
+rust_path = "src/taxonomy.rs"
+rust_class = "Taxonomy"
+other = "Taxonomy::GenerateExternalToInternalIDMap"
+other_path = "kraken2/src/taxonomy.cc"
+
+[[entries]]
+rust = "init_taxonomy"
+rust_path = "src/taxonomy.rs"
+other = "init_taxonomy"
+other_path = "kraken2/src/libtax.cc"
+
+[[entries]]
+rust = "get_lca"
+rust_path = "src/taxonomy.rs"
+other = "get_lca"
+other_path = "kraken2/src/libtax.cc"
+
+[[entries]]
+rust = "get_parent_id"
+rust_path = "src/taxonomy.rs"
+other = "get_parent_id"
+other_path = "kraken2/src/libtax.cc"
+
+[[entries]]
+rust = "is_ancestor_of"
+rust_path = "src/taxonomy.rs"
+other = "is_ancestor_of"
+other_path = "kraken2/src/libtax.cc"
+
+[[entries]]
+rust = "get_internal_taxid"
+rust_path = "src/taxonomy.rs"
+other = "get_internal_taxid"
+other_path = "kraken2/src/libtax.cc"
+
+[[entries]]
+rust = "is_a_ancestor_of_b"
+rust_path = "src/taxonomy.rs"
+rust_class = "Taxonomy"
+other = "Taxonomy::IsAAncestorOfB"
+other_path = "kraken2/src/taxonomy.cc"
+
+[[entries]]
+rust = "lowest_common_ancestor"
+rust_path = "src/taxonomy.rs"
+rust_class = "Taxonomy"
+other = "Taxonomy::LowestCommonAncestor"
+other_path = "kraken2/src/taxonomy.cc"
+
+[[entries]]
+rust = "get_rank"
+rust_path = "src/taxonomy.rs"
+other = "get_rank"
+other_path = "kraken2/src/libtax.cc"
+
+[[entries]]
+rust = "taxid_to_name"
+rust_path = "src/taxonomy.rs"
+other = "taxid_to_name"
+other_path = "kraken2/src/libtax.cc"
+
+[[entries]]
+rust = "get_child_count"
+rust_path = "src/taxonomy.rs"
+other = "get_child_count"
+other_path = "kraken2/src/libtax.cc"
+
+[[entries]]
+rust = "get_child_taxids"
+rust_path = "src/taxonomy.rs"
+other = "get_child_taxids"
+other_path = "kraken2/src/libtax.cc"
+
+[[entries]]
+rust = "write_to_disk_libtax"
+rust_path = "src/taxonomy.rs"
+other = "write_to_disk"
+other_path = "kraken2/src/libtax.cc"
+
+[[entries]]
+rust = "read_id_to_taxon_map"
+rust_path = "src/taxonomy.rs"
+other = "ReadIDToTaxonMap"
+other_path = "kraken2/src/libtax.cc"
+
+[[entries]]
+rust = "generate_taxonomy_libtax"
+rust_path = "src/taxonomy.rs"
+other = "generate_taxonomy"
+other_path = "kraken2/src/libtax.cc"
+
+[[entries]]
+rust = "destroy_taxonomy"
+rust_path = "src/taxonomy.rs"
+other = "destroy_taxonomy"
+other_path = "kraken2/src/libtax.cc"
+
+[[entries]]
+rust = "ffi_murmurhash3"
+rust_path = "src/ffi.rs"
+other = "ffi_murmurhash3"
+other_path = "kraken2/src/kraken2_ffi.cc"
+
+[[entries]]
+rust = "ffi_expand_spaced_seed_mask"
+rust_path = "src/ffi.rs"
+other = "ffi_expand_spaced_seed_mask"
+other_path = "kraken2/src/kraken2_ffi.cc"
+
+[[entries]]
+rust = "ffi_taxonomy_load"
+rust_path = "src/ffi.rs"
+other = "ffi_taxonomy_load"
+other_path = "kraken2/src/kraken2_ffi.cc"
+
+[[entries]]
+rust = "ffi_taxonomy_destroy"
+rust_path = "src/ffi.rs"
+other = "ffi_taxonomy_destroy"
+other_path = "kraken2/src/kraken2_ffi.cc"
+
+[[entries]]
+rust = "ffi_taxonomy_node_count"
+rust_path = "src/ffi.rs"
+other = "ffi_taxonomy_node_count"
+other_path = "kraken2/src/kraken2_ffi.cc"
+
+[[entries]]
+rust = "ffi_taxonomy_get_internal_id"
+rust_path = "src/ffi.rs"
+other = "ffi_taxonomy_get_internal_id"
+other_path = "kraken2/src/kraken2_ffi.cc"
+
+[[entries]]
+rust = "ffi_taxonomy_lca"
+rust_path = "src/ffi.rs"
+other = "ffi_taxonomy_lca"
+other_path = "kraken2/src/kraken2_ffi.cc"
+
+[[entries]]
+rust = "ffi_taxonomy_is_a_ancestor_of_b"
+rust_path = "src/ffi.rs"
+other = "ffi_taxonomy_is_a_ancestor_of_b"
+other_path = "kraken2/src/kraken2_ffi.cc"
+
+[[entries]]
+rust = "ffi_taxonomy_get_node"
+rust_path = "src/ffi.rs"
+other = "ffi_taxonomy_get_node"
+other_path = "kraken2/src/kraken2_ffi.cc"
+
+[[entries]]
+rust = "ffi_taxonomy_name_data"
+rust_path = "src/ffi.rs"
+other = "ffi_taxonomy_name_data"
+other_path = "kraken2/src/kraken2_ffi.cc"
+
+[[entries]]
+rust = "ffi_taxonomy_rank_data"
+rust_path = "src/ffi.rs"
+other = "ffi_taxonomy_rank_data"
+other_path = "kraken2/src/kraken2_ffi.cc"
+
+[[entries]]
+rust = "ffi_taxonomy_write_to_disk"
+rust_path = "src/ffi.rs"
+other = "ffi_taxonomy_write_to_disk"
+other_path = "kraken2/src/kraken2_ffi.cc"
+
+[[entries]]
+rust = "ffi_generate_taxonomy"
+rust_path = "src/ffi.rs"
+other = "ffi_generate_taxonomy"
+other_path = "kraken2/src/kraken2_ffi.cc"
+
+[[entries]]
+rust = "ffi_scanner_new"
+rust_path = "src/ffi.rs"
+other = "ffi_scanner_new"
+other_path = "kraken2/src/kraken2_ffi.cc"
+
+[[entries]]
+rust = "ffi_scanner_destroy"
+rust_path = "src/ffi.rs"
+other = "ffi_scanner_destroy"
+other_path = "kraken2/src/kraken2_ffi.cc"
+
+[[entries]]
+rust = "ffi_scanner_context_new"
+rust_path = "src/ffi.rs"
+other = "ffi_scanner_context_new"
+other_path = "kraken2/src/kraken2_ffi.cc"
+
+[[entries]]
+rust = "ffi_scanner_context_destroy"
+rust_path = "src/ffi.rs"
+other = "ffi_scanner_context_destroy"
+other_path = "kraken2/src/kraken2_ffi.cc"
+
+[[entries]]
+rust = "ffi_scanner_context_load_sequence"
+rust_path = "src/ffi.rs"
+other = "ffi_scanner_context_load_sequence"
+other_path = "kraken2/src/kraken2_ffi.cc"
+
+[[entries]]
+rust = "ffi_scanner_context_next_minimizer"
+rust_path = "src/ffi.rs"
+other = "ffi_scanner_context_next_minimizer"
+other_path = "kraken2/src/kraken2_ffi.cc"
+
+[[entries]]
+rust = "ffi_scanner_context_is_ambiguous"
+rust_path = "src/ffi.rs"
+other = "ffi_scanner_context_is_ambiguous"
+other_path = "kraken2/src/kraken2_ffi.cc"
+
+[[entries]]
+rust = "ffi_cht_new"
+rust_path = "src/ffi.rs"
+other = "ffi_cht_new"
+other_path = "kraken2/src/kraken2_ffi.cc"
+
+[[entries]]
+rust = "ffi_cht_load"
+rust_path = "src/ffi.rs"
+other = "ffi_cht_load"
+other_path = "kraken2/src/kraken2_ffi.cc"
+
+[[entries]]
+rust = "ffi_cht_destroy"
+rust_path = "src/ffi.rs"
+other = "ffi_cht_destroy"
+other_path = "kraken2/src/kraken2_ffi.cc"
+
+[[entries]]
+rust = "ffi_cht_get"
+rust_path = "src/ffi.rs"
+other = "ffi_cht_get"
+other_path = "kraken2/src/kraken2_ffi.cc"
+
+[[entries]]
+rust = "ffi_cht_find_index"
+rust_path = "src/ffi.rs"
+other = "ffi_cht_find_index"
+other_path = "kraken2/src/kraken2_ffi.cc"
+
+[[entries]]
+rust = "ffi_cht_compare_and_set"
+rust_path = "src/ffi.rs"
+other = "ffi_cht_compare_and_set"
+other_path = "kraken2/src/kraken2_ffi.cc"
+
+[[entries]]
+rust = "ffi_cht_direct_compare_and_set"
+rust_path = "src/ffi.rs"
+other = "ffi_cht_direct_compare_and_set"
+other_path = "kraken2/src/kraken2_ffi.cc"
+
+[[entries]]
+rust = "ffi_cht_write"
+rust_path = "src/ffi.rs"
+other = "ffi_cht_write"
+other_path = "kraken2/src/kraken2_ffi.cc"
+
+[[entries]]
+rust = "ffi_cht_capacity"
+rust_path = "src/ffi.rs"
+other = "ffi_cht_capacity"
+other_path = "kraken2/src/kraken2_ffi.cc"
+
+[[entries]]
+rust = "ffi_cht_size"
+rust_path = "src/ffi.rs"
+other = "ffi_cht_size"
+other_path = "kraken2/src/kraken2_ffi.cc"
+
+[[entries]]
+rust = "ffi_cht_key_bits"
+rust_path = "src/ffi.rs"
+other = "ffi_cht_key_bits"
+other_path = "kraken2/src/kraken2_ffi.cc"
+
+[[entries]]
+rust = "ffi_cht_value_bits"
+rust_path = "src/ffi.rs"
+other = "ffi_cht_value_bits"
+other_path = "kraken2/src/kraken2_ffi.cc"
+
+[[entries]]
+rust = "ffi_translate_to_all_frames"
+rust_path = "src/ffi.rs"
+other = "ffi_translate_to_all_frames"
+other_path = "kraken2/src/kraken2_ffi.cc"
+
+[[entries]]
+rust = "ffi_free_string"
+rust_path = "src/ffi.rs"
+other = "ffi_free_string"
+other_path = "kraken2/src/kraken2_ffi.cc"
+
+[[entries]]
+rust = "ffi_read_index_options"
+rust_path = "src/ffi.rs"
+other = "ffi_read_index_options"
+other_path = "kraken2/src/kraken2_ffi.cc"
+
+[[entries]]
+rust = "ffi_write_index_options"
+rust_path = "src/ffi.rs"
+other = "ffi_write_index_options"
+other_path = "kraken2/src/kraken2_ffi.cc"
+
+[[entries]]
+rust = "ffi_sizeof_index_options"
+rust_path = "src/ffi.rs"
+other = "ffi_sizeof_index_options"
+other_path = "kraken2/src/kraken2_ffi.cc"
+
+[[entries]]
+rust = "omp_get_thread_num"
+rust_path = "src/omp.rs"
+other = "omp_get_thread_num"
+other_path = "kraken2/src/omp_hack.cc"
+
+[[entries]]
+rust = "omp_get_max_threads"
+rust_path = "src/omp.rs"
+other = "omp_get_max_threads"
+other_path = "kraken2/src/omp_hack.cc"
+
+[[entries]]
+rust = "omp_set_num_threads"
+rust_path = "src/omp.rs"
+other = "omp_set_num_threads"
+other_path = "kraken2/src/omp_hack.cc"
+
+[[entries]]
+rust = "omp_init_lock"
+rust_path = "src/omp.rs"
+other = "omp_init_lock"
+other_path = "kraken2/src/omp_hack.cc"
+
+[[entries]]
+rust = "omp_destroy_lock"
+rust_path = "src/omp.rs"
+other = "omp_destroy_lock"
+other_path = "kraken2/src/omp_hack.cc"
+
+[[entries]]
+rust = "omp_set_lock"
+rust_path = "src/omp.rs"
+other = "omp_set_lock"
+other_path = "kraken2/src/omp_hack.cc"
+
+[[entries]]
+rust = "omp_unset_lock"
+rust_path = "src/omp.rs"
+other = "omp_unset_lock"
+other_path = "kraken2/src/omp_hack.cc"
+
+[[entries]]
+rust = "omp_test_lock"
+rust_path = "src/omp.rs"
+other = "omp_test_lock"
+other_path = "kraken2/src/omp_hack.cc"
+
+[[entries]]
+rust = "print_mpa_style_report_line"
+rust_path = "src/reports.rs"
+other = "PrintMpaStyleReportLine"
+other_path = "kraken2/src/reports.cc"
+
+[[entries]]
+rust = "murmurhash3_finalizer"
+rust_path = "src/hyperloglog.rs"
+other = "murmurhash3_finalizer"
+other_path = "kraken2/src/hyperloglogplus.cc"
+
+[[entries]]
+rust = "clz_manual"
+rust_path = "src/hyperloglog.rs"
+other = "clz_manual"
+other_path = "kraken2/src/hyperloglogplus.cc"
+
+[[entries]]
+rust = "clz_u32"
+rust_path = "src/hyperloglog.rs"
+other = "clz"
+other_path = "kraken2/src/hyperloglogplus.cc"
+other_line = 52
+
+[[entries]]
+rust = "clz_u64"
+rust_path = "src/hyperloglog.rs"
+other = "clz"
+other_path = "kraken2/src/hyperloglogplus.cc"
+other_line = 57
+
+[[entries]]
+rust = "clz_p"
+rust_path = "src/hyperloglog.rs"
+other = "clz_p"
+other_path = "kraken2/src/hyperloglogplus.cc"
+
+[[entries]]
+rust = "extract_bits"
+rust_path = "src/hyperloglog.rs"
+other = "extractBits"
+other_path = "kraken2/src/hyperloglogplus.cc"
+
+[[entries]]
+rust = "extract_high_bits_u64"
+rust_path = "src/hyperloglog.rs"
+other = "extractHighBits"
+other_path = "kraken2/src/hyperloglogplus.cc"
+other_line = 93
+
+[[entries]]
+rust = "extract_high_bits_u32"
+rust_path = "src/hyperloglog.rs"
+other = "extractHighBits"
+other_path = "kraken2/src/hyperloglogplus.cc"
+other_line = 97
+
+[[entries]]
+rust = "get_index_u64"
+rust_path = "src/hyperloglog.rs"
+other = "getIndex"
+other_path = "kraken2/src/hyperloglogplus.cc"
+other_line = 102
+
+[[entries]]
+rust = "get_index_u32"
+rust_path = "src/hyperloglog.rs"
+other = "getIndex"
+other_path = "kraken2/src/hyperloglogplus.cc"
+other_line = 107
+
+[[entries]]
+rust = "trailing_ones"
+rust_path = "src/hyperloglog.rs"
+other = "trailingOnes"
+other_path = "kraken2/src/hyperloglogplus.cc"
+
+[[entries]]
+rust = "get_rank_u64"
+rust_path = "src/hyperloglog.rs"
+other = "getRank"
+other_path = "kraken2/src/hyperloglogplus.cc"
+other_line = 126
+
+[[entries]]
+rust = "get_encoded_rank"
+rust_path = "src/hyperloglog.rs"
+other = "getEncodedRank"
+other_path = "kraken2/src/hyperloglogplus.cc"
+
+[[entries]]
+rust = "get_rank_u32"
+rust_path = "src/hyperloglog.rs"
+other = "getRank"
+other_path = "kraken2/src/hyperloglogplus.cc"
+other_line = 117
+
+[[entries]]
+rust = "encode_hash_in_32bit"
+rust_path = "src/hyperloglog.rs"
+other = "encodeHashIn32Bit"
+other_path = "kraken2/src/hyperloglogplus.cc"
+
+[[entries]]
+rust = "add_hash_to_sparse_vec"
+rust_path = "src/hyperloglog.rs"
+other = "addHashToSparseList"
+other_path = "kraken2/src/hyperloglogplus.cc"
+other_line = 192
+
+[[entries]]
+rust = "add_hash_to_sparse_set"
+rust_path = "src/hyperloglog.rs"
+other = "addHashToSparseList"
+other_path = "kraken2/src/hyperloglogplus.cc"
+other_line = 226
+
+[[entries]]
+rust = "alpha"
+rust_path = "src/hyperloglog.rs"
+other = "alpha"
+other_path = "kraken2/src/hyperloglogplus.cc"
+
+[[entries]]
+rust = "linear_counting"
+rust_path = "src/hyperloglog.rs"
+other = "linearCounting"
+other_path = "kraken2/src/hyperloglogplus.cc"
+
+[[entries]]
+rust = "calculate_raw_estimate"
+rust_path = "src/hyperloglog.rs"
+other = "calculateRawEstimate"
+other_path = "kraken2/src/hyperloglogplus.cc"
+
+[[entries]]
+rust = "count_zeros"
+rust_path = "src/hyperloglog.rs"
+other = "countZeros"
+other_path = "kraken2/src/hyperloglogplus.cc"
+
+[[entries]]
+rust = "get_estimate_bias"
+rust_path = "src/hyperloglog.rs"
+other = "getEstimateBias"
+other_path = "kraken2/src/hyperloglogplus.cc"
+
+[[entries]]
+rust = "register_histogram"
+rust_path = "src/hyperloglog.rs"
+other = "registerHistogram"
+other_path = "kraken2/src/hyperloglogplus.cc"
+
+[[entries]]
+rust = "sparse_register_histogram"
+rust_path = "src/hyperloglog.rs"
+other = "sparseRegisterHistogram"
+other_path = "kraken2/src/hyperloglogplus.cc"
+
+[[entries]]
+rust = "sigma"
+rust_path = "src/hyperloglog.rs"
+other = "sigma"
+other_path = "kraken2/src/hyperloglogplus.cc"
+
+[[entries]]
+rust = "sigma_mod"
+rust_path = "src/hyperloglog.rs"
+other = "sigma_mod"
+other_path = "kraken2/src/hyperloglogplus.cc"
+
+[[entries]]
+rust = "tau"
+rust_path = "src/hyperloglog.rs"
+other = "tau"
+other_path = "kraken2/src/hyperloglogplus.cc"
+
+[[entries]]
+rust = "new"
+rust_path = "src/hyperloglog.rs"
+rust_class = "HyperLogLogPlusMinus"
+other = "HyperLogLogPlusMinus<uint64_t>::HyperLogLogPlusMinus"
+other_path = "kraken2/src/hyperloglogplus.cc"
+other_line = 414
+
+[[entries]]
+rust = "insert"
+rust_path = "src/hyperloglog.rs"
+rust_class = "HyperLogLogPlusMinus"
+other = "HyperLogLogPlusMinus<uint64_t>::insert"
+other_path = "kraken2/src/hyperloglogplus.cc"
+
+[[entries]]
+rust = "insert_many"
+rust_path = "src/hyperloglog.rs"
+rust_class = "HyperLogLogPlusMinus"
+other = "HyperLogLogPlusMinus<T>::insert"
+other_path = "kraken2/src/hyperloglogplus.cc"
+
+[[entries]]
+rust = "switch_to_normal"
+rust_path = "src/hyperloglog.rs"
+rust_class = "HyperLogLogPlusMinus"
+other = "HyperLogLogPlusMinus<T>::switchToNormalRepresentation"
+other_path = "kraken2/src/hyperloglogplus.cc"
+
+[[entries]]
+rust = "add_to_registers_from_sparse"
+rust_path = "src/hyperloglog.rs"
+rust_class = "HyperLogLogPlusMinus"
+other = "HyperLogLogPlusMinus<T>::addToRegisters"
+other_path = "kraken2/src/hyperloglogplus.cc"
+
+[[entries]]
+rust = "merge"
+rust_path = "src/hyperloglog.rs"
+rust_class = "HyperLogLogPlusMinus"
+other = "HyperLogLogPlusMinus<T>::merge"
+other_path = "kraken2/src/hyperloglogplus.cc"
+other_line = 614
+
+[[entries]]
+rust = "merge_owned"
+rust_path = "src/hyperloglog.rs"
+rust_class = "HyperLogLogPlusMinus"
+other = "HyperLogLogPlusMinus<T>::merge"
+other_path = "kraken2/src/hyperloglogplus.cc"
+other_line = 573
+
+[[entries]]
+rust = "ertl_cardinality"
+rust_path = "src/hyperloglog.rs"
+rust_class = "HyperLogLogPlusMinus"
+other = "HyperLogLogPlusMinus<uint64_t>::ertlCardinality"
+other_path = "kraken2/src/hyperloglogplus.cc"
+
+[[entries]]
+rust = "flajolet_cardinality"
+rust_path = "src/hyperloglog.rs"
+rust_class = "HyperLogLogPlusMinus"
+other = "HyperLogLogPlusMinus<uint64_t>::flajoletCardinality"
+other_path = "kraken2/src/hyperloglogplus.cc"
+
+[[entries]]
+rust = "heule_cardinality"
+rust_path = "src/hyperloglog.rs"
+rust_class = "HyperLogLogPlusMinus"
+other = "HyperLogLogPlusMinus<uint64_t>::heuleCardinality"
+other_path = "kraken2/src/hyperloglogplus.cc"
+
+[[entries]]
+rust = "cardinality"
+rust_path = "src/hyperloglog.rs"
+rust_class = "HyperLogLogPlusMinus"
+other = "HyperLogLogPlusMinus<uint64_t>::cardinality"
+other_path = "kraken2/src/hyperloglogplus.cc"
+
+[[entries]]
+rust = "size"
+rust_path = "src/hyperloglog.rs"
+rust_class = "HyperLogLogPlusMinus"
+other = "HyperLogLogPlusMinus<uint64_t>::size"
+other_path = "kraken2/src/hyperloglogplus.cc"
+
+[[entries]]
+rust = "n_observed"
+rust_path = "src/hyperloglog.rs"
+rust_class = "HyperLogLogPlusMinus"
+other = "HyperLogLogPlusMinus<T>::nObserved"
+other_path = "kraken2/src/hyperloglogplus.cc"
+
+[[entries]]
+rust = "reset"
+rust_path = "src/hyperloglog.rs"
+rust_class = "HyperLogLogPlusMinus"
+other = "HyperLogLogPlusMinus<T>::reset"
+other_path = "kraken2/src/hyperloglogplus.cc"
+
+[[entries]]
+rust = "copy_construct"
+rust_path = "src/hyperloglog.rs"
+rust_class = "HyperLogLogPlusMinus"
+other = "HyperLogLogPlusMinus<HASH>::HyperLogLogPlusMinus"
+other_path = "kraken2/src/hyperloglogplus.cc"
+other_line = 453
+
+[[entries]]
+rust = "move_construct"
+rust_path = "src/hyperloglog.rs"
+rust_class = "HyperLogLogPlusMinus"
+other = "HyperLogLogPlusMinus<HASH>::HyperLogLogPlusMinus"
+other_path = "kraken2/src/hyperloglogplus.cc"
+other_line = 462
+
+[[entries]]
+rust = "assign_from_move"
+rust_path = "src/hyperloglog.rs"
+rust_class = "HyperLogLogPlusMinus"
+other = "HyperLogLogPlusMinus<HASH>::operator="
+other_path = "kraken2/src/hyperloglogplus.cc"
+other_line = 429
+
+[[entries]]
+rust = "assign_from_copy"
+rust_path = "src/hyperloglog.rs"
+rust_class = "HyperLogLogPlusMinus"
+other = "HyperLogLogPlusMinus<HASH>::operator="
+other_path = "kraken2/src/hyperloglogplus.cc"
+other_line = 441
+
+[[entries]]
+rust = "add_assign"
+rust_path = "src/hyperloglog.rs"
+rust_class = "HyperLogLogPlusMinus"
+other = "HyperLogLogPlusMinus<T>::operator+="
+other_path = "kraken2/src/hyperloglogplus.cc"
+other_line = 660
+
+[[entries]]
+rust = "add_assign_ref"
+rust_path = "src/hyperloglog.rs"
+rust_class = "HyperLogLogPlusMinus"
+other = "HyperLogLogPlusMinus<T>::operator+="
+other_path = "kraken2/src/hyperloglogplus.cc"
+other_line = 654
+
+[[entries]]
+rust = "ranhash"
+rust_path = "src/hyperloglog.rs"
+other = "ranhash"
+other_path = "kraken2/src/hyperloglogplus.cc"
+
+[[entries]]
+rust = "wang_mixer"
+rust_path = "src/hyperloglog.rs"
+other = "wang_mixer"
+other_path = "kraken2/src/hyperloglogplus.cc"
+
+[[entries]]
+rust = "no_hash"
+rust_path = "src/hyperloglog.rs"
+other = "operator()"
+other_path = "kraken2/src/hyperloglogplus.cc"
+
+[[entries]]
+rust = "process_sequence"
+rust_path = "src/estimate.rs"
+other = "ProcessSequence"
+other_path = "kraken2/src/estimate_capacity.cc"
+
+[[entries]]
+rust = "extract_ncbi_sequence_ids"
+rust_path = "src/build_db.rs"
+other = "ExtractNCBISequenceIDs"
+other_path = "kraken2/src/build_db.cc"
+
+[[entries]]
+rust = "read_id_to_taxon_map"
+rust_path = "src/build_db.rs"
+other = "ReadIDToTaxonMap"
+other_path = "kraken2/src/build_db.cc"
+
+[[entries]]
+rust = "generate_taxonomy"
+rust_path = "src/build_db.rs"
+other = "GenerateTaxonomy"
+other_path = "kraken2/src/build_db.cc"
+
+[[entries]]
+rust = "set_minimizer_lca"
+rust_path = "src/build_db.rs"
+other = "SetMinimizerLCA"
+other_path = "kraken2/src/build_db.cc"
+
+[[entries]]
+rust = "process_sequence_deterministic"
+rust_path = "src/build_db.rs"
+other = "ProcessSequence"
+other_path = "kraken2/src/build_db.cc"
+
+[[entries]]
+rust = "process_sequence_fast"
+rust_path = "src/build_db.rs"
+other = "ProcessSequenceFast"
+other_path = "kraken2/src/build_db.cc"
+
+[[entries]]
+rust = "process_sequences"
+rust_path = "src/build_db.rs"
+other = "ProcessSequences"
+other_path = "kraken2/src/build_db.cc"
+
+[[entries]]
+rust = "process_sequences_fast"
+rust_path = "src/build_db.rs"
+other = "ProcessSequencesFast"
+other_path = "kraken2/src/build_db.cc"
+
+[[entries]]
+rust = "parse_command_line"
+rust_path = "src/build_db.rs"
+other = "ParseCommandLine"
+other_path = "kraken2/src/build_db.cc"
+
+[[entries]]
+rust = "usage"
+rust_path = "src/build_db.rs"
+other = "usage"
+other_path = "kraken2/src/build_db.cc"
+
+[[entries]]
+rust = "main"
+rust_path = "src/bin/build_db.rs"
+other = "main"
+other_path = "kraken2/src/build_db.cc"
+
+[[entries]]
+rust = "parse_command_line"
+rust_path = "src/estimate.rs"
+other = "ParseCommandLine"
+other_path = "kraken2/src/estimate_capacity.cc"
+
+[[entries]]
+rust = "usage"
+rust_path = "src/estimate.rs"
+other = "usage"
+other_path = "kraken2/src/estimate_capacity.cc"
+
+[[entries]]
+rust = "process_sequence"
+rust_path = "src/estimate.rs"
+other = "ProcessSequence"
+other_path = "kraken2/src/estimate_capacity.cc"
+
+[[entries]]
+rust = "process_sequences"
+rust_path = "src/estimate.rs"
+other = "ProcessSequences"
+other_path = "kraken2/src/estimate_capacity.cc"
+
+[[entries]]
+rust = "main"
+rust_path = "src/bin/estimate_capacity.rs"
+other = "main"
+other_path = "kraken2/src/estimate_capacity.cc"
+
+[[entries]]
+rust = "resolve_tree"
+rust_path = "src/classify.rs"
+other = "ResolveTree"
+other_path = "kraken2/src/classify.cc"
+
+[[entries]]
+rust = "add_hitlist_string"
+rust_path = "src/classify.rs"
+other = "AddHitlistString"
+other_path = "kraken2/src/classify.cc"
+
+[[entries]]
+rust = "trim_pair_info"
+rust_path = "src/classify.rs"
+other = "TrimPairInfo"
+other_path = "kraken2/src/classify.cc"
+
+[[entries]]
+rust = "mask_low_quality_bases"
+rust_path = "src/classify.rs"
+other = "MaskLowQualityBases"
+other_path = "kraken2/src/classify.cc"
+
+[[entries]]
+rust = "classify_sequence"
+rust_path = "src/classify.rs"
+other = "ClassifySequence"
+other_path = "kraken2/src/classify.cc"
+
+[[entries]]
+rust = "classify_with_index_data"
+rust_path = "src/classify.rs"
+other = "ProcessFiles"
+other_path = "kraken2/src/classify.cc"
+
+[[entries]]
+rust = "reset"
+rust_path = "src/classify.rs"
+rust_class = "Options"
+other = "reset"
+other_path = "kraken2/src/classify.cc"
+
+[[entries]]
+rust = "remove_blocking"
+rust_path = "src/classify.rs"
+other = "RemoveBlocking"
+other_path = "kraken2/src/classify.cc"
+
+[[entries]]
+rust = "daemonize"
+rust_path = "src/classify.rs"
+other = "daemonize"
+other_path = "kraken2/src/classify.cc"
+
+[[entries]]
+rust = "open_fifos"
+rust_path = "src/classify.rs"
+other = "OpenFifos"
+other_path = "kraken2/src/classify.cc"
+
+[[entries]]
+rust = "load_index"
+rust_path = "src/classify.rs"
+other = "load_index"
+other_path = "kraken2/src/classify.cc"
+
+[[entries]]
+rust = "report_stats"
+rust_path = "src/classify.rs"
+other = "ReportStats"
+other_path = "kraken2/src/classify.cc"
+
+[[entries]]
+rust = "tokenize_string"
+rust_path = "src/classify.rs"
+other = "TokenizeString"
+other_path = "kraken2/src/classify.cc"
+
+[[entries]]
+rust = "open_output_stream"
+rust_path = "src/classify.rs"
+other = "OpenOutputStream"
+other_path = "kraken2/src/classify.cc"
+
+[[entries]]
+rust = "initialize_outputs"
+rust_path = "src/classify.rs"
+other = "InitializeOutputs"
+other_path = "kraken2/src/classify.cc"
+
+[[entries]]
+rust = "parse_command_line"
+rust_path = "src/classify.rs"
+other = "ParseCommandLine"
+other_path = "kraken2/src/classify.cc"
+
+[[entries]]
+rust = "run_daemon"
+rust_path = "src/classify.rs"
+other = "ClassifyDaemon"
+other_path = "kraken2/src/classify.cc"
+
+[[entries]]
+rust = "usage"
+rust_path = "src/classify.rs"
+other = "usage"
+other_path = "kraken2/src/classify.cc"
+
+[[entries]]
+rust = "classify"
+rust_path = "src/classify.rs"
+other = "classify"
+other_path = "kraken2/src/classify.cc"
+
+[[entries]]
+rust = "run_daemon"
+rust_path = "src/classify.rs"
+other = "ClassifyDaemon"
+other_path = "kraken2/src/classify.cc"
+
+[[entries]]
+rust = "main"
+rust_path = "src/bin/classify.rs"
+other = "main"
+other_path = "kraken2/src/classify.cc"
+
+[[entries]]
+rust = "mask2str"
+rust_path = "src/dump_table.rs"
+other = "mask2str"
+other_path = "kraken2/src/dump_table.cc"
+
+[[entries]]
+rust = "parse_command_line"
+rust_path = "src/dump_table.rs"
+other = "ParseCommandLine"
+other_path = "kraken2/src/dump_table.cc"
+
+[[entries]]
+rust = "usage"
+rust_path = "src/dump_table.rs"
+other = "usage"
+other_path = "kraken2/src/dump_table.cc"
+
+[[entries]]
+rust = "main"
+rust_path = "src/bin/dump_table.rs"
+other = "main"
+other_path = "kraken2/src/dump_table.cc"
+
+[[entries]]
+rust = "get_clade_counts"
+rust_path = "src/reports.rs"
+other = "GetCladeCounts"
+other_path = "kraken2/src/reports.cc"
+
+[[entries]]
+rust = "get_clade_counters"
+rust_path = "src/reports.rs"
+other = "GetCladeCounters"
+other_path = "kraken2/src/reports.cc"
+
+[[entries]]
+rust = "mpa_report_dfs"
+rust_path = "src/reports.rs"
+other = "MpaReportDFS"
+other_path = "kraken2/src/reports.cc"
+
+[[entries]]
+rust = "report_mpa_style"
+rust_path = "src/reports.rs"
+other = "ReportMpaStyle"
+other_path = "kraken2/src/reports.cc"
+
+[[entries]]
+rust = "print_kraken_style_report_line"
+rust_path = "src/reports.rs"
+other = "PrintKrakenStyleReportLine"
+other_path = "kraken2/src/reports.cc"
+
+[[entries]]
+rust = "kraken_report_dfs"
+rust_path = "src/reports.rs"
+other = "KrakenReportDFS"
+other_path = "kraken2/src/reports.cc"
+
+[[entries]]
+rust = "report_kraken_style"
+rust_path = "src/reports.rs"
+other = "ReportKrakenStyle"
+other_path = "kraken2/src/reports.cc"
+
+[[entries]]
+rust = "main"
+rust_path = "src/bin/lookup_accession_numbers.rs"
+other = "main"
+other_path = "kraken2/src/lookup_accession_numbers.cc"
+
+[[entries]]
+rust = "main"
+rust_path = "src/bin/mmtest.rs"
+other = "main"
+other_path = "kraken2/src/mmtest.cc"
+
+[[entries]]
+rust = "close_file"
+rust_path = "src/mmap_file.rs"
+rust_class = "MMapFile"
+other = "MMapFile::CloseFile"
+other_path = "kraken2/src/mmap_file.cc"
+
+[[entries]]
+rust = "drop"
+rust_path = "src/mmap_file.rs"
+rust_class = "MMapFile"
+other = "MMapFile::~MMapFile"
+other_path = "kraken2/src/mmap_file.cc"
+
+[[entries]]
+rust = "usage"
+rust_path = "src/dust.rs"
+other = "usage"
+other_path = "kraken2/src/k2mask.cc"
+
+[[entries]]
+rust = "file_exists"
+rust_path = "src/dust.rs"
+other = "fileExists"
+other_path = "kraken2/src/k2mask.cc"
+
+[[entries]]
+rust = "stricasecmp"
+rust_path = "src/dust.rs"
+other = "stricasecmp"
+other_path = "kraken2/src/k2mask.cc"
+
+[[entries]]
+rust = "shift_window"
+rust_path = "src/dust.rs"
+other = "shiftWindow"
+other_path = "kraken2/src/k2mask.cc"
+
+[[entries]]
+rust = "save_masked_regions"
+rust_path = "src/dust.rs"
+other = "saveMaskedRegions"
+other_path = "kraken2/src/k2mask.cc"
+
+[[entries]]
+rust = "find_perfect"
+rust_path = "src/dust.rs"
+other = "findPerfect"
+other_path = "kraken2/src/k2mask.cc"
+
+[[entries]]
+rust = "run_symmetric_dust"
+rust_path = "src/dust.rs"
+other = "runSymmetricDust"
+other_path = "kraken2/src/k2mask.cc"
+
+[[entries]]
+rust = "print_fasta"
+rust_path = "src/dust.rs"
+other = "printFasta"
+other_path = "kraken2/src/k2mask.cc"
+
+[[entries]]
+rust = "mask"
+rust_path = "src/dust.rs"
+other = "mask"
+other_path = "kraken2/src/k2mask.cc"
+
+[[entries]]
+rust = "main"
+rust_path = "src/bin/k2mask.rs"
+other = "main"
+other_path = "kraken2/src/k2mask.cc"
+
+[[entries]]
+rust = "reset"
+rust_path = "src/dust.rs"
+rust_class = "SDust"
+other = "reset"
+other_path = "kraken2/src/k2mask.cc"
+
+[[entries]]
+rust = "default_new"
+rust_path = "src/dust.rs"
+rust_class = "SDust"
+other = "SDust"
+other_path = "kraken2/src/k2mask.cc"
+
+[[entries]]
+rust = "nlz"
+rust_path = "src/blast.rs"
+other = "nlz"
+other_path = "kraken2/src/blast_utils.c"
+
+[[entries]]
+rust = "next_power_of_2"
+rust_path = "src/blast.rs"
+other = "next_power_of_2"
+other_path = "kraken2/src/blast_utils.c"
+
+[[entries]]
+rust = "alloc_memory"
+rust_path = "src/blast.rs"
+other = "alloc_memory"
+other_path = "kraken2/src/blast_utils.c"
+
+[[entries]]
+rust = "read_into_buffer"
+rust_path = "src/blast.rs"
+other = "read_into_buffer"
+other_path = "kraken2/src/blast_utils.c"
+
+[[entries]]
+rust = "init_string"
+rust_path = "src/blast.rs"
+other = "init_string"
+other_path = "kraken2/src/blast_to_fasta.c"
+
+[[entries]]
+rust = "string_length"
+rust_path = "src/blast.rs"
+other = "string_length"
+other_path = "kraken2/src/blast_to_fasta.c"
+
+[[entries]]
+rust = "string_capacity"
+rust_path = "src/blast.rs"
+other = "string_capacity"
+other_path = "kraken2/src/blast_to_fasta.c"
+
+[[entries]]
+rust = "string_clear"
+rust_path = "src/blast.rs"
+other = "string_clear"
+other_path = "kraken2/src/blast_to_fasta.c"
+
+[[entries]]
+rust = "string_data"
+rust_path = "src/blast.rs"
+other = "string_data"
+other_path = "kraken2/src/blast_to_fasta.c"
+
+[[entries]]
+rust = "to_c_string"
+rust_path = "src/blast.rs"
+other = "to_c_string"
+other_path = "kraken2/src/blast_to_fasta.c"
+
+[[entries]]
+rust = "string_append_char"
+rust_path = "src/blast.rs"
+other = "string_append_char"
+other_path = "kraken2/src/blast_to_fasta.c"
+
+[[entries]]
+rust = "string_append_int"
+rust_path = "src/blast.rs"
+other = "string_append_int"
+other_path = "kraken2/src/blast_to_fasta.c"
+
+[[entries]]
+rust = "string_append_str"
+rust_path = "src/blast.rs"
+other = "string_append_str"
+other_path = "kraken2/src/blast_to_fasta.c"
+
+[[entries]]
+rust = "string_copy"
+rust_path = "src/blast.rs"
+other = "string_copy"
+other_path = "kraken2/src/blast_to_fasta.c"
+
+[[entries]]
+rust = "string_append"
+rust_path = "src/blast.rs"
+other = "string_append"
+other_path = "kraken2/src/blast_to_fasta.c"
+
+[[entries]]
+rust = "string_reserve"
+rust_path = "src/blast.rs"
+other = "string_reserve"
+other_path = "kraken2/src/blast_to_fasta.c"
+
+[[entries]]
+rust = "string_read_from_file"
+rust_path = "src/blast.rs"
+other = "string_read_from_file"
+other_path = "kraken2/src/blast_to_fasta.c"
+
+[[entries]]
+rust = "free_string"
+rust_path = "src/blast.rs"
+other = "free_string"
+other_path = "kraken2/src/blast_to_fasta.c"
+
+[[entries]]
+rust = "ntoh_64"
+rust_path = "src/blast.rs"
+other = "ntoh_64"
+other_path = "kraken2/src/blast_to_fasta.c"
+
+[[entries]]
+rust = "u32_to_amb32"
+rust_path = "src/blast.rs"
+other = "u32_to_amb32"
+other_path = "kraken2/src/blast_to_fasta.c"
+
+[[entries]]
+rust = "u64_to_amb64"
+rust_path = "src/blast.rs"
+other = "u64_to_amb64"
+other_path = "kraken2/src/blast_to_fasta.c"
+
+[[entries]]
+rust = "read_int"
+rust_path = "src/blast.rs"
+other = "read_int"
+other_path = "kraken2/src/blast_to_fasta.c"
+
+[[entries]]
+rust = "read_long"
+rust_path = "src/blast.rs"
+other = "read_long"
+other_path = "kraken2/src/blast_to_fasta.c"
+
+[[entries]]
+rust = "read_array"
+rust_path = "src/blast.rs"
+other = "read_array"
+other_path = "kraken2/src/blast_to_fasta.c"
+
+[[entries]]
+rust = "open_file"
+rust_path = "src/blast.rs"
+other = "open_file"
+other_path = "kraken2/src/blast_utils.c"
+
+[[entries]]
+rust = "read_string"
+rust_path = "src/blast.rs"
+other = "read_string"
+other_path = "kraken2/src/blast_to_fasta.c"
+
+[[entries]]
+rust = "init_idx_data"
+rust_path = "src/blast.rs"
+other = "init_idx_data"
+other_path = "kraken2/src/blast_to_fasta.c"
+
+[[entries]]
+rust = "read_idx_data"
+rust_path = "src/blast.rs"
+other = "read_idx_data"
+other_path = "kraken2/src/blast_to_fasta.c"
+
+[[entries]]
+rust = "free_idx_data"
+rust_path = "src/blast.rs"
+other = "free_idx_data"
+other_path = "kraken2/src/blast_to_fasta.c"
+
+[[entries]]
+rust = "init_hdr_data"
+rust_path = "src/blast.rs"
+other = "init_hdr_data"
+other_path = "kraken2/src/blast_to_fasta.c"
+
+[[entries]]
+rust = "free_hdr_data"
+rust_path = "src/blast.rs"
+other = "free_hdr_data"
+other_path = "kraken2/src/blast_to_fasta.c"
+
+[[entries]]
+rust = "db_tag_to_string"
+rust_path = "src/blast.rs"
+other = "db_tag_to_string"
+other_path = "kraken2/src/blast_to_fasta.c"
+
+[[entries]]
+rust = "text_seq_id_to_string"
+rust_path = "src/blast.rs"
+other = "text_seq_id_to_string"
+other_path = "kraken2/src/blast_to_fasta.c"
+
+[[entries]]
+rust = "pdb_seq_id_to_string"
+rust_path = "src/blast.rs"
+other = "pdb_seq_id_to_string"
+other_path = "kraken2/src/blast_to_fasta.c"
+
+[[entries]]
+rust = "defline_to_header"
+rust_path = "src/blast.rs"
+other = "defline_to_header"
+other_path = "kraken2/src/blast_to_fasta.c"
+
+[[entries]]
+rust = "deflines_to_header"
+rust_path = "src/blast.rs"
+other = "deflines_to_header"
+other_path = "kraken2/src/blast_to_fasta.c"
+
+[[entries]]
+rust = "get_deflines"
+rust_path = "src/blast.rs"
+other = "get_deflines"
+other_path = "kraken2/src/blast_to_fasta.c"
+
+[[entries]]
+rust = "init_seq_data"
+rust_path = "src/blast.rs"
+other = "init_seq_data"
+other_path = "kraken2/src/blast_to_fasta.c"
+
+[[entries]]
+rust = "max_block_size"
+rust_path = "src/blast.rs"
+other = "max_block_size"
+other_path = "kraken2/src/blast_to_fasta.c"
+
+[[entries]]
+rust = "has_ambiguous_data"
+rust_path = "src/blast.rs"
+other = "has_ambiguous_data"
+other_path = "kraken2/src/blast_to_fasta.c"
+
+[[entries]]
+rust = "get_nucleotide_length"
+rust_path = "src/blast.rs"
+other = "get_nucleotide_length"
+other_path = "kraken2/src/blast_to_fasta.c"
+
+[[entries]]
+rust = "read_seq_block"
+rust_path = "src/blast.rs"
+other = "read_seq_block"
+other_path = "kraken2/src/blast_to_fasta.c"
+
+[[entries]]
+rust = "read_ambiguous_data"
+rust_path = "src/blast.rs"
+other = "read_ambiguous_data"
+other_path = "kraken2/src/blast_to_fasta.c"
+
+[[entries]]
+rust = "reconstruct_sequence"
+rust_path = "src/blast.rs"
+other = "reconstruct_sequence"
+other_path = "kraken2/src/blast_to_fasta.c"
+
+[[entries]]
+rust = "next_sequence"
+rust_path = "src/blast.rs"
+other = "next_sequence"
+other_path = "kraken2/src/blast_to_fasta.c"
+
+[[entries]]
+rust = "write_sequence"
+rust_path = "src/blast.rs"
+other = "write_sequence"
+other_path = "kraken2/src/blast_to_fasta.c"
+
+[[entries]]
+rust = "free_seq_data"
+rust_path = "src/blast.rs"
+other = "free_seq_data"
+other_path = "kraken2/src/blast_to_fasta.c"
+
+[[entries]]
+rust = "init_asn1"
+rust_path = "src/blast.rs"
+other = "init_asn1"
+other_path = "kraken2/src/blast_defline.c"
+
+[[entries]]
+rust = "free_asn1"
+rust_path = "src/blast.rs"
+other = "free_asn1"
+other_path = "kraken2/src/blast_defline.c"
+
+[[entries]]
+rust = "load_more_data"
+rust_path = "src/blast.rs"
+other = "load_more_data"
+other_path = "kraken2/src/blast_defline.c"
+
+[[entries]]
+rust = "asn1_get_byte"
+rust_path = "src/blast.rs"
+other = "asn1_get_byte"
+other_path = "kraken2/src/blast_defline.c"
+
+[[entries]]
+rust = "asn1_backtrack"
+rust_path = "src/blast.rs"
+other = "asn1_backtrack"
+other_path = "kraken2/src/blast_defline.c"
+
+[[entries]]
+rust = "asn1_peek_byte"
+rust_path = "src/blast.rs"
+other = "asn1_peek_byte"
+other_path = "kraken2/src/blast_defline.c"
+
+[[entries]]
+rust = "asn1_sequence_start"
+rust_path = "src/blast.rs"
+other = "asn1_sequence_start"
+other_path = "kraken2/src/blast_defline.c"
+
+[[entries]]
+rust = "asn1_indefinite_tag_end"
+rust_path = "src/blast.rs"
+other = "asn1_indefinite_tag_end"
+other_path = "kraken2/src/blast_defline.c"
+
+[[entries]]
+rust = "asn1_is_end_of_sequence"
+rust_path = "src/blast.rs"
+other = "asn1_is_end_of_sequence"
+other_path = "kraken2/src/blast_defline.c"
+
+[[entries]]
+rust = "asn1_get_visible_string"
+rust_path = "src/blast.rs"
+other = "asn1_get_visible_string"
+other_path = "kraken2/src/blast_defline.c"
+
+[[entries]]
+rust = "asn1_get_integer"
+rust_path = "src/blast.rs"
+other = "asn1_get_integer"
+other_path = "kraken2/src/blast_defline.c"
+
+[[entries]]
+rust = "get_explicit_tag"
+rust_path = "src/blast.rs"
+other = "get_explicit_tag"
+other_path = "kraken2/src/blast_defline.c"
+
+[[entries]]
+rust = "asn1_get_optional_visible_string_field"
+rust_path = "src/blast.rs"
+other = "asn1_get_optional_visible_string_field"
+other_path = "kraken2/src/blast_defline.c"
+
+[[entries]]
+rust = "asn1_get_optional_integer_field"
+rust_path = "src/blast.rs"
+other = "asn1_get_optional_integer_field"
+other_path = "kraken2/src/blast_defline.c"
+
+[[entries]]
+rust = "asn1_get_mandatory_integer_field"
+rust_path = "src/blast.rs"
+other = "asn1_get_mandatory_integer_field"
+other_path = "kraken2/src/blast_defline.c"
+
+[[entries]]
+rust = "asn1_get_mandatory_visible_string_field"
+rust_path = "src/blast.rs"
+other = "asn1_get_mandatory_visible_string_field"
+other_path = "kraken2/src/blast_defline.c"
+
+[[entries]]
+rust = "get_date"
+rust_path = "src/blast.rs"
+other = "get_date"
+other_path = "kraken2/src/blast_defline.c"
+
+[[entries]]
+rust = "get_db_tag"
+rust_path = "src/blast.rs"
+other = "get_db_tag"
+other_path = "kraken2/src/blast_defline.c"
+
+[[entries]]
+rust = "get_pdb_seq_id"
+rust_path = "src/blast.rs"
+other = "get_pdb_seq_id"
+other_path = "kraken2/src/blast_defline.c"
+
+[[entries]]
+rust = "get_gi_import_id"
+rust_path = "src/blast.rs"
+other = "get_gi_import_id"
+other_path = "kraken2/src/blast_defline.c"
+
+[[entries]]
+rust = "get_text_seq_id"
+rust_path = "src/blast.rs"
+other = "get_text_seq_id"
+other_path = "kraken2/src/blast_defline.c"
+
+[[entries]]
+rust = "get_patent_seq_id"
+rust_path = "src/blast.rs"
+other = "get_patent_seq_id"
+other_path = "kraken2/src/blast_defline.c"
+
+[[entries]]
+rust = "get_object_id"
+rust_path = "src/blast.rs"
+other = "get_object_id"
+other_path = "kraken2/src/blast_defline.c"
+
+[[entries]]
+rust = "get_id_pat"
+rust_path = "src/blast.rs"
+other = "get_id_pat"
+other_path = "kraken2/src/blast_defline.c"
+
+[[entries]]
+rust = "get_seq_id"
+rust_path = "src/blast.rs"
+other = "get_seq_id"
+other_path = "kraken2/src/blast_defline.c"
+
+[[entries]]
+rust = "get_ints"
+rust_path = "src/blast.rs"
+other = "get_ints"
+other_path = "kraken2/src/blast_defline.c"
+
+[[entries]]
+rust = "get_memberships"
+rust_path = "src/blast.rs"
+other = "get_memberships"
+other_path = "kraken2/src/blast_defline.c"
+
+[[entries]]
+rust = "get_links"
+rust_path = "src/blast.rs"
+other = "get_links"
+other_path = "kraken2/src/blast_defline.c"
+
+[[entries]]
+rust = "get_other_info"
+rust_path = "src/blast.rs"
+other = "get_other_info"
+other_path = "kraken2/src/blast_defline.c"
+
+[[entries]]
+rust = "get_blast_defline"
+rust_path = "src/blast.rs"
+other = "get_blast_defline"
+other_path = "kraken2/src/blast_defline.c"
+
+[[entries]]
+rust = "init_blast_defline"
+rust_path = "src/blast.rs"
+other = "init_blast_defline"
+other_path = "kraken2/src/blast_defline.c"
+
+[[entries]]
+rust = "reset_blast_defline"
+rust_path = "src/blast.rs"
+other = "reset_blast_defline"
+other_path = "kraken2/src/blast_defline.c"
+
+[[entries]]
+rust = "destroy_blast_defline"
+rust_path = "src/blast.rs"
+other = "destroy_blast_defline"
+other_path = "kraken2/src/blast_defline.c"
+
+[[entries]]
+rust = "get_blast_deflines"
+rust_path = "src/blast.rs"
+other = "get_blast_deflines"
+other_path = "kraken2/src/blast_defline.c"
+
+[[entries]]
+rust = "decode_ncbi2na"
+rust_path = "src/blast.rs"
+other = "reconstruct_sequence"
+other_path = "kraken2/src/blast_to_fasta.c"
+
+[[entries]]
+rust = "blast_to_fasta_usage"
+rust_path = "src/blast.rs"
+other = "usage"
+other_path = "kraken2/src/blast_to_fasta.c"
+
+[[entries]]
+rust = "blast_to_fasta_help"
+rust_path = "src/blast.rs"
+other = "help"
+other_path = "kraken2/src/blast_to_fasta.c"
+
+[[entries]]
+rust = "main"
+rust_path = "src/bin/blast_to_fasta.rs"
+other = "main"
+other_path = "kraken2/src/blast_to_fasta.c"

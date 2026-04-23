@@ -154,7 +154,11 @@ impl BatchSequenceReader {
         };
 
         let is_fastq = header_line.starts_with('@');
-        let format = if is_fastq { SequenceFormat::Fastq } else { SequenceFormat::Fasta };
+        let format = if is_fastq {
+            SequenceFormat::Fastq
+        } else {
+            SequenceFormat::Fasta
+        };
         self.file_format = format;
 
         // Parse header: first word is name, rest is comment
@@ -173,7 +177,10 @@ impl BatchSequenceReader {
                 Ok(0) => break,
                 Ok(_) => {
                     let trimmed = line.trim_end_matches(['\n', '\r']);
-                    if trimmed.starts_with('>') || trimmed.starts_with('@') || trimmed.starts_with('+') {
+                    if trimmed.starts_with('>')
+                        || trimmed.starts_with('@')
+                        || trimmed.starts_with('+')
+                    {
                         if is_fastq && trimmed.starts_with('+') {
                             // This is the quality separator line
                             break;
@@ -224,7 +231,11 @@ mod tests {
     #[test]
     fn test_read_fasta() {
         let tmp = tempfile::NamedTempFile::new().unwrap();
-        write!(tmp.as_file(), ">seq1 some comment\nACGTACGT\nGGGG\n>seq2\nTTTT\n").unwrap();
+        write!(
+            tmp.as_file(),
+            ">seq1 some comment\nACGTACGT\nGGGG\n>seq2\nTTTT\n"
+        )
+        .unwrap();
 
         let mut reader = BatchSequenceReader::new(Some(tmp.path().to_str().unwrap())).unwrap();
         assert!(reader.load_block(1000));
@@ -245,7 +256,11 @@ mod tests {
     #[test]
     fn test_read_fastq() {
         let tmp = tempfile::NamedTempFile::new().unwrap();
-        write!(tmp.as_file(), "@read1 desc\nACGT\n+\nIIII\n@read2\nTTTT\n+\nJJJJ\n").unwrap();
+        write!(
+            tmp.as_file(),
+            "@read1 desc\nACGT\n+\nIIII\n@read2\nTTTT\n+\nJJJJ\n"
+        )
+        .unwrap();
 
         let mut reader = BatchSequenceReader::new(Some(tmp.path().to_str().unwrap())).unwrap();
         assert!(reader.load_block(1000));

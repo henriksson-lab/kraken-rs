@@ -30,8 +30,11 @@ pub struct CompactHashTable {
 impl CompactHashTable {
     /// Create a new empty hash table with the given parameters.
     pub fn new(capacity: usize, key_bits: usize, value_bits: usize) -> Self {
-        assert_eq!(key_bits + value_bits, 32,
-            "sum of key bits and value bits must equal 32");
+        assert_eq!(
+            key_bits + value_bits,
+            32,
+            "sum of key bits and value bits must equal 32"
+        );
         assert!(key_bits > 0, "key bits cannot be zero");
         assert!(value_bits > 0, "value bits cannot be zero");
 
@@ -57,6 +60,10 @@ impl CompactHashTable {
         } else {
             Self::from_file_read(filename)
         }
+    }
+
+    pub fn from_cstr(filename: &str, memory_mapping: bool) -> io::Result<Self> {
+        Self::from_file(filename, memory_mapping)
     }
 
     fn from_file_read(filename: &str) -> io::Result<Self> {
@@ -109,8 +116,10 @@ impl CompactHashTable {
         let cell_data = &data[32..];
         let expected_len = capacity * 4;
         if cell_data.len() < expected_len {
-            return Err(io::Error::new(io::ErrorKind::InvalidData,
-                "Capacity mismatch in hash table file"));
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "Capacity mismatch in hash table file",
+            ));
         }
 
         let table = unsafe {
@@ -242,7 +251,12 @@ impl CompactHashTable {
                     // Safety: we hold the zone lock, so no concurrent writes to this cell
                     unsafe {
                         let cell_ptr = self.table.as_ptr().add(idx) as *mut CompactHashCell;
-                        (*cell_ptr).populate(compacted_key, new_value, self.key_bits, self.value_bits);
+                        (*cell_ptr).populate(
+                            compacted_key,
+                            new_value,
+                            self.key_bits,
+                            self.value_bits,
+                        );
                     }
                     if *old_value == 0 {
                         self.size.fetch_add(1, Ordering::Relaxed);
@@ -336,6 +350,8 @@ impl CompactHashTable {
     pub fn occupancy(&self) -> f64 {
         self.size() as f64 / self.capacity as f64
     }
+
+    pub fn destroy(self) {}
 }
 
 // The CompactHashTable uses interior mutability via zone locks for CompareAndSet,
@@ -424,6 +440,9 @@ mod tests {
         cht.write_table(out_path.to_str().unwrap()).unwrap();
         let ref_bytes = std::fs::read(&ref_path).unwrap();
         let out_bytes = std::fs::read(&out_path).unwrap();
-        assert_eq!(ref_bytes, out_bytes, "Write roundtrip of reference hash table differs");
+        assert_eq!(
+            ref_bytes, out_bytes,
+            "Write roundtrip of reference hash table differs"
+        );
     }
 }

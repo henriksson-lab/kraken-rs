@@ -50,9 +50,7 @@ fn download_and_extract_tar_gz(
     for entry in archive.entries()? {
         let mut entry = entry?;
         let path = entry.path()?.to_path_buf();
-        let filename = path.file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or("");
+        let filename = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
         if keep_files.is_empty() || keep_files.contains(&filename) {
             let out_path = output_dir.join(filename);
             let mut out_file = File::create(&out_path)?;
@@ -71,7 +69,8 @@ pub fn download_taxonomy(db_dir: &str, skip_maps: bool, protein: bool) -> io::Re
     // Download accession-to-taxid maps
     if !skip_maps {
         if protein {
-            let url = format!("{NCBI_FTP_BASE}/pub/taxonomy/accession2taxid/prot.accession2taxid.gz");
+            let url =
+                format!("{NCBI_FTP_BASE}/pub/taxonomy/accession2taxid/prot.accession2taxid.gz");
             let out = taxonomy_dir.join("prot.accession2taxid");
             download_and_decompress_gz(&url, out.to_str().unwrap())?;
         } else {
@@ -130,7 +129,11 @@ fn parse_assembly_summary(path: &Path) -> io::Result<Vec<AssemblyEntry>> {
         if asm_level != "Complete Genome" && asm_level != "Chromosome" {
             continue;
         }
-        entries.push(AssemblyEntry { taxid, asm_level, ftp_path });
+        entries.push(AssemblyEntry {
+            taxid,
+            asm_level,
+            ftp_path,
+        });
     }
     Ok(entries)
 }
@@ -142,7 +145,11 @@ fn download_genomes(
     output_path: &Path,
     protein: bool,
 ) -> io::Result<(usize, usize, usize)> {
-    let suffix = if protein { "_protein.faa.gz" } else { "_genomic.fna.gz" };
+    let suffix = if protein {
+        "_protein.faa.gz"
+    } else {
+        "_genomic.fna.gz"
+    };
     let mut output = File::create(output_path)?;
     let mut projects = 0;
     let mut sequences = 0;
@@ -221,12 +228,18 @@ pub fn download_library(db_dir: &str, library_type: &str, protein: bool) -> io::
     let library_dir = PathBuf::from(db_dir).join("library").join(library_type);
     fs::create_dir_all(&library_dir)?;
 
-    let library_file = if protein { "library.faa" } else { "library.fna" };
+    let library_file = if protein {
+        "library.faa"
+    } else {
+        "library.fna"
+    };
 
     match library_type {
         "UniVec" | "UniVec_Core" => {
             if protein {
-                return Err(io::Error::other(format!("{library_type} is for nucleotide databases only")));
+                return Err(io::Error::other(format!(
+                    "{library_type} is for nucleotide databases only"
+                )));
             }
             let url = format!("{NCBI_FTP_BASE}/pub/UniVec/{library_type}");
             let raw_path = library_dir.join(library_type);
@@ -261,14 +274,16 @@ pub fn download_library(db_dir: &str, library_type: &str, protein: bool) -> io::
             };
 
             // Download assembly_summary.txt
-            let summary_url = format!("{NCBI_FTP_BASE}/genomes/refseq/{remote_dir}/assembly_summary.txt");
+            let summary_url =
+                format!("{NCBI_FTP_BASE}/genomes/refseq/{remote_dir}/assembly_summary.txt");
             let summary_path = library_dir.join("assembly_summary.txt");
             download_file(&summary_url, summary_path.to_str().unwrap())?;
 
             // For human, filter to GRC assemblies only
             if library_type == "human" {
                 let content = fs::read_to_string(&summary_path)?;
-                let filtered: String = content.lines()
+                let filtered: String = content
+                    .lines()
                     .filter(|l| l.starts_with('#') || l.contains("Genome Reference Consortium"))
                     .map(|l| format!("{l}\n"))
                     .collect();
@@ -277,7 +292,10 @@ pub fn download_library(db_dir: &str, library_type: &str, protein: bool) -> io::
 
             // Parse assembly summary and download genomes
             let entries = parse_assembly_summary(&summary_path)?;
-            eprintln!("Found {} complete genome entries for {library_type}", entries.len());
+            eprintln!(
+                "Found {} complete genome entries for {library_type}",
+                entries.len()
+            );
 
             let output_path = library_dir.join(library_file);
             download_genomes(&entries, &output_path, protein)?;
@@ -292,11 +310,16 @@ pub fn download_library(db_dir: &str, library_type: &str, protein: bool) -> io::
         }
 
         _ => {
-            return Err(io::Error::other(format!("Unknown library type: {library_type}")));
+            return Err(io::Error::other(format!(
+                "Unknown library type: {library_type}"
+            )));
         }
     }
 
-    eprintln!("Library {library_type} downloaded to {}", library_dir.display());
+    eprintln!(
+        "Library {library_type} downloaded to {}",
+        library_dir.display()
+    );
     Ok(())
 }
 
@@ -344,7 +367,8 @@ mod tests {
         let tmp = tempfile::NamedTempFile::new().unwrap();
         // Minimal assembly_summary format: field 5=taxid, 11=asm_level, 19=ftp_path
         let line = "GCF_000005845.2\tPRJNA225\tSAMN02436677\tna\t\t511145\t511145\tna\tReference Genome\tna\tna\tComplete Genome\tMajor\tFull\t2013/09/26\tASM584v2\tNational Center for Biotechnology Information\tGCA_000005845.2\t=\thttps://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/000/005/845/GCF_000005845.2_ASM584v2\n";
-        std::io::Write::write_all(&mut tmp.as_file(), format!("# header\n{line}").as_bytes()).unwrap();
+        std::io::Write::write_all(&mut tmp.as_file(), format!("# header\n{line}").as_bytes())
+            .unwrap();
 
         let entries = parse_assembly_summary(tmp.path()).unwrap();
         assert_eq!(entries.len(), 1);

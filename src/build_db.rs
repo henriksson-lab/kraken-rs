@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 use std::fs::File;
-use std::io::{self, BufRead, BufReader};
+use std::io::{self, BufRead, BufReader, IsTerminal};
 
 use crate::compact_hash::CompactHashTable;
 use crate::hash::murmurhash3;
@@ -148,8 +148,8 @@ fn process_sequence_deterministic(
     taxonomy: &Taxonomy,
     opts: &BuildOptions,
 ) {
-    use std::collections::BTreeSet;
     use parking_lot::Mutex;
+    use std::collections::BTreeSet;
 
     const SET_CT: usize = 256;
 
@@ -268,9 +268,498 @@ fn process_sequence_fast(
         let mut existing_taxid: HValue = 0;
         let mut new_taxid = taxid;
         while !hash.compare_and_set(minimizer, new_taxid, &mut existing_taxid) {
-            new_taxid = taxonomy.lowest_common_ancestor(new_taxid as u64, existing_taxid as u64) as HValue;
+            new_taxid =
+                taxonomy.lowest_common_ancestor(new_taxid as u64, existing_taxid as u64) as HValue;
         }
     }
+}
+
+fn process_sequences_fast(
+    opts: &BuildOptions,
+    id_to_taxon_map: &BTreeMap<String, TaxId>,
+    kraken_index: &CompactHashTable,
+    taxonomy: &Taxonomy,
+) -> io::Result<()> {
+    let mut processed_seq_ct = 0usize;
+    let mut processed_ch_ct = 0usize;
+    let mut scanner = MinimizerScanner::new(
+        opts.k as isize,
+        opts.l as isize,
+        opts.spaced_seed_mask,
+        !opts.input_is_protein,
+        opts.toggle_mask,
+        CURRENT_REVCOM_VERSION,
+    );
+    let mut reader = BatchSequenceReader::new(None)?;
+
+    while reader.load_block(opts.block_size) {
+        while let Some(seq) = reader.next_sequence() {
+            let mut sequence = seq.clone();
+            let all_sequence_ids = extract_ncbi_sequence_ids(&sequence.header);
+            let mut taxid: TaxId = 0;
+            for seqid in &all_sequence_ids {
+                if let Some(&ext_taxid) = id_to_taxon_map.get(seqid) {
+                    if ext_taxid == 0 {
+                        continue;
+                    }
+                    taxid =
+                        taxonomy.lowest_common_ancestor(taxid, taxonomy.get_internal_id(ext_taxid));
+                }
+            }
+            if taxid != 0 {
+                if opts.input_is_protein && !sequence.seq.ends_with('*') {
+                    sequence.seq.push('*');
+                }
+                process_sequence_fast(
+                    &sequence.seq,
+                    taxid as HValue,
+                    kraken_index,
+                    taxonomy,
+                    &mut scanner,
+                    opts.min_clear_hash_value,
+                );
+                processed_seq_ct += 1;
+                processed_ch_ct += sequence.seq.len();
+            }
+        }
+        if io::stderr().is_terminal() {
+            eprint!(
+                "\rProcessed {} sequences ({} {})...",
+                processed_seq_ct,
+                processed_ch_ct,
+                if opts.input_is_protein { "aa" } else { "bp" }
+            );
+        }
+    }
+    if io::stderr().is_terminal() {
+        eprint!("\r");
+    }
+    eprintln!(
+        "Completed processing of {} sequences, {} {}",
+        processed_seq_ct,
+        processed_ch_ct,
+        if opts.input_is_protein { "aa" } else { "bp" }
+    );
+    Ok(())
+}
+
+fn process_sequences(
+    opts: &BuildOptions,
+    id_to_taxon_map: &BTreeMap<String, TaxId>,
+    kraken_index: &CompactHashTable,
+    taxonomy: &Taxonomy,
+) -> io::Result<()> {
+    let mut processed_seq_ct = 0usize;
+    let mut processed_ch_ct = 0usize;
+    let mut reader = BatchSequenceReader::new(None)?;
+
+    while reader.load_block(opts.block_size) {
+        while let Some(sequence) = reader.next_sequence() {
+            let all_sequence_ids = extract_ncbi_sequence_ids(&sequence.header);
+            let mut taxid: TaxId = 0;
+            for seqid in &all_sequence_ids {
+                if let Some(&ext_taxid) = id_to_taxon_map.get(seqid) {
+                    if ext_taxid == 0 {
+                        continue;
+                    }
+                    taxid =
+                        taxonomy.lowest_common_ancestor(taxid, taxonomy.get_internal_id(ext_taxid));
+                }
+            }
+            if taxid != 0 {
+                let mut seq = sequence.seq.clone();
+                if opts.input_is_protein && !seq.ends_with('*') {
+                    seq.push('*');
+                }
+                process_sequence_deterministic(&seq, taxid as HValue, kraken_index, taxonomy, opts);
+                processed_seq_ct += 1;
+                processed_ch_ct += seq.len();
+            }
+        }
+        if io::stderr().is_terminal() {
+            eprint!(
+                "\rProcessed {} sequences ({} {})...",
+                processed_seq_ct,
+                processed_ch_ct,
+                if opts.input_is_protein { "aa" } else { "bp" }
+            );
+        }
+    }
+    if io::stderr().is_terminal() {
+        eprint!("\r");
+    }
+    eprintln!(
+        "Completed processing of {} sequences, {} {}",
+        processed_seq_ct,
+        processed_ch_ct,
+        if opts.input_is_protein { "aa" } else { "bp" }
+    );
+    Ok(())
+}
+
+fn parse_command_line(args: &[String], opts: &mut BuildOptions) -> io::Result<()> {
+    let mut i = 1usize;
+    while i < args.len() {
+        match args[i].as_str() {
+            "-h" | "-?" => return Err(io::Error::other(usage(0))),
+            "-B" => {
+                i += 1;
+                let sig = args
+                    .get(i)
+                    .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "missing -B value"))?
+                    .parse::<i64>()
+                    .map_err(|_| {
+                        io::Error::new(io::ErrorKind::InvalidInput, "must have positive block size")
+                    })?;
+                if sig < 1 {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "must have positive block size",
+                    ));
+                }
+                opts.block_size = sig as usize;
+            }
+            "-b" => {
+                i += 1;
+                let sig = args
+                    .get(i)
+                    .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "missing -b value"))?
+                    .parse::<i64>()
+                    .map_err(|_| {
+                        io::Error::new(
+                            io::ErrorKind::InvalidInput,
+                            "must have positive subblock size",
+                        )
+                    })?;
+                if sig < 1 {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "must have positive subblock size",
+                    ));
+                }
+                opts.subblock_size = sig as usize;
+            }
+            "-r" => {
+                i += 1;
+                let sig = args
+                    .get(i)
+                    .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "missing -r value"))?
+                    .parse::<i64>()
+                    .map_err(|_| {
+                        io::Error::new(
+                            io::ErrorKind::InvalidInput,
+                            "can't have negative bit storage",
+                        )
+                    })?;
+                if sig < 0 {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "can't have negative bit storage",
+                    ));
+                }
+                if sig > 31 {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "can't have more than 31 bits of storage for taxid",
+                    ));
+                }
+                opts.requested_bits_for_taxid = sig as usize;
+            }
+            "-p" => {
+                i += 1;
+                let sig = args
+                    .get(i)
+                    .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "missing -p value"))?
+                    .parse::<i64>()
+                    .map_err(|_| {
+                        io::Error::new(
+                            io::ErrorKind::InvalidInput,
+                            "can't have negative number of threads",
+                        )
+                    })?;
+                if sig < 1 {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "can't have negative number of threads",
+                    ));
+                }
+                opts.num_threads = sig as usize;
+            }
+            "-H" => {
+                i += 1;
+                opts.hashtable_filename = args.get(i).cloned().unwrap_or_default();
+            }
+            "-m" => {
+                i += 1;
+                opts.id_to_taxon_map_filename = args.get(i).cloned().unwrap_or_default();
+            }
+            "-n" => {
+                i += 1;
+                opts.ncbi_taxonomy_directory = args.get(i).cloned().unwrap_or_default();
+            }
+            "-o" => {
+                i += 1;
+                opts.options_filename = args.get(i).cloned().unwrap_or_default();
+            }
+            "-t" => {
+                i += 1;
+                opts.taxonomy_filename = args.get(i).cloned().unwrap_or_default();
+            }
+            "-S" => {
+                i += 1;
+                opts.spaced_seed_mask =
+                    u64::from_str_radix(args.get(i).map(String::as_str).unwrap_or(""), 2).map_err(
+                        |_| io::Error::new(io::ErrorKind::InvalidInput, "invalid spaced seed mask"),
+                    )?;
+            }
+            "-T" => {
+                i += 1;
+                opts.toggle_mask =
+                    u64::from_str_radix(args.get(i).map(String::as_str).unwrap_or(""), 2).map_err(
+                        |_| io::Error::new(io::ErrorKind::InvalidInput, "invalid toggle mask"),
+                    )?;
+            }
+            "-k" => {
+                i += 1;
+                let sig = args
+                    .get(i)
+                    .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "missing -k value"))?
+                    .parse::<i64>()
+                    .map_err(|_| {
+                        io::Error::new(io::ErrorKind::InvalidInput, "k must be positive integer")
+                    })?;
+                if sig < 1 {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "k must be positive integer",
+                    ));
+                }
+                opts.k = sig as usize;
+            }
+            "-l" => {
+                i += 1;
+                let sig = args
+                    .get(i)
+                    .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "missing -l value"))?
+                    .parse::<i64>()
+                    .map_err(|_| {
+                        io::Error::new(io::ErrorKind::InvalidInput, "l must be positive integer")
+                    })?;
+                if sig < 1 {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "l must be positive integer",
+                    ));
+                }
+                if sig > 31 {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "l must be no more than 31",
+                    ));
+                }
+                opts.l = sig as usize;
+            }
+            "-c" => {
+                i += 1;
+                let sig = args
+                    .get(i)
+                    .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "missing -c value"))?
+                    .parse::<i64>()
+                    .map_err(|_| {
+                        io::Error::new(
+                            io::ErrorKind::InvalidInput,
+                            "capacity must be positive integer",
+                        )
+                    })?;
+                if sig < 1 {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "capacity must be positive integer",
+                    ));
+                }
+                opts.capacity = sig as usize;
+            }
+            "-M" => {
+                i += 1;
+                let sig = args
+                    .get(i)
+                    .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "missing -M value"))?
+                    .parse::<i64>()
+                    .map_err(|_| {
+                        io::Error::new(
+                            io::ErrorKind::InvalidInput,
+                            "max capacity must be positive integer",
+                        )
+                    })?;
+                if sig < 1 {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "max capacity must be positive integer",
+                    ));
+                }
+                opts.maximum_capacity = sig as usize;
+            }
+            "-F" => opts.deterministic_build = false,
+            "-X" => opts.input_is_protein = true,
+            _ => {}
+        }
+        i += 1;
+    }
+
+    if opts.spaced_seed_mask != DEFAULT_SPACED_SEED_MASK {
+        crate::utilities::expand_spaced_seed_mask(
+            &mut opts.spaced_seed_mask,
+            if opts.input_is_protein {
+                BITS_PER_CHAR_PRO as i32
+            } else {
+                BITS_PER_CHAR_DNA as i32
+            },
+        );
+    }
+    if opts.hashtable_filename.is_empty()
+        || opts.id_to_taxon_map_filename.is_empty()
+        || opts.ncbi_taxonomy_directory.is_empty()
+        || opts.options_filename.is_empty()
+        || opts.taxonomy_filename.is_empty()
+    {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "missing mandatory filename parameter",
+        ));
+    }
+    if opts.k == 0 || opts.l == 0 || opts.capacity == 0 {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "missing mandatory integer parameter",
+        ));
+    }
+    if opts.k < opts.l {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "k cannot be less than l",
+        ));
+    }
+    if opts.block_size < opts.subblock_size {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "block size cannot be less than subblock size",
+        ));
+    }
+    if opts.maximum_capacity > opts.capacity {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "maximum capacity option shouldn't specify larger capacity than normal",
+        ));
+    }
+
+    Ok(())
+}
+
+fn usage(_exit_code: i32) -> String {
+    [
+        "Usage: build_db <options>",
+        "",
+        "Options (*mandatory):",
+        "* -H FILENAME   Kraken 2 hash table filename",
+        "* -m FILENAME   Sequence ID to taxon map filename",
+        "* -t FILENAME   Kraken 2 taxonomy filename",
+        "* -n DIR        NCBI taxonomy directory name",
+        "* -o FILENAME   Kraken 2 options filename",
+        "* -k INT        Set length of k-mers",
+        "* -l INT        Set length of minimizers",
+        "* -c INT        Set capacity of hash table",
+        "  -M INT        Set maximum capacity of hash table (MiniKraken)",
+        "  -S BITSTRING  Spaced seed mask",
+        "  -T BITSTRING  Minimizer toggle mask",
+        "  -X            Input seqs. are proteins",
+        "  -p INT        Number of threads",
+        "  -F            Use fast, nondeterministic building method",
+        "  -B INT        Read block size",
+        "  -b INT        Read subblock size",
+        "  -r INT        Bit storage requested for taxid",
+    ]
+    .join("\n")
+}
+
+pub fn build_db_main(args: &[String]) -> io::Result<()> {
+    let mut opts = BuildOptions {
+        spaced_seed_mask: DEFAULT_SPACED_SEED_MASK,
+        toggle_mask: DEFAULT_TOGGLE_MASK,
+        input_is_protein: false,
+        num_threads: 1,
+        block_size: 10 * 1024 * 1024,
+        subblock_size: 1024,
+        requested_bits_for_taxid: 0,
+        min_clear_hash_value: 0,
+        maximum_capacity: 0,
+        deterministic_build: true,
+        ..BuildOptions::default()
+    };
+    parse_command_line(args, &mut opts)?;
+
+    let id_map = read_id_to_taxon_map(&opts.id_to_taxon_map_filename)?;
+    generate_taxonomy(
+        &opts.ncbi_taxonomy_directory,
+        &id_map,
+        &opts.taxonomy_filename,
+    )?;
+    eprintln!("Taxonomy parsed and converted.");
+
+    let mut taxonomy = Taxonomy::from_file(&opts.taxonomy_filename, false)?;
+    taxonomy.generate_external_to_internal_id_map();
+    let mut bits_needed_for_value = 1usize;
+    while (1usize << bits_needed_for_value) < taxonomy.node_count() {
+        bits_needed_for_value += 1;
+    }
+    if opts.requested_bits_for_taxid > 0 && bits_needed_for_value > opts.requested_bits_for_taxid {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "more bits required for storing taxid",
+        ));
+    }
+
+    let bits_for_taxid = bits_needed_for_value.max(opts.requested_bits_for_taxid);
+    let mut actual_capacity = opts.capacity;
+    if opts.maximum_capacity > 0 {
+        let frac = opts.maximum_capacity as f64 / opts.capacity as f64;
+        if frac > 1.0 {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "maximum capacity larger than requested capacity",
+            ));
+        }
+        opts.min_clear_hash_value = ((1.0 - frac) * u64::MAX as f64) as u64;
+        actual_capacity = opts.maximum_capacity;
+    }
+
+    let kraken_index = CompactHashTable::new(actual_capacity, 32 - bits_for_taxid, bits_for_taxid);
+    eprintln!(
+        "CHT created with {} bits reserved for taxid.",
+        bits_for_taxid
+    );
+
+    if opts.deterministic_build {
+        process_sequences(&opts, &id_map, &kraken_index, &taxonomy)?;
+    } else {
+        process_sequences_fast(&opts, &id_map, &kraken_index, &taxonomy)?;
+    }
+
+    eprint!("Writing data to disk... ");
+    kraken_index.write_table(&opts.hashtable_filename)?;
+
+    let mut index_opts = IndexOptions::new();
+    index_opts.k = opts.k;
+    index_opts.l = opts.l;
+    index_opts.spaced_seed_mask = opts.spaced_seed_mask;
+    index_opts.toggle_mask = opts.toggle_mask;
+    index_opts.dna_db = !opts.input_is_protein;
+    index_opts.minimum_acceptable_hash_value = opts.min_clear_hash_value;
+    index_opts.revcom_version = CURRENT_REVCOM_VERSION;
+    index_opts.db_version = 0;
+    index_opts.db_type = 0;
+    index_opts.write_to_file(&opts.options_filename)?;
+    eprintln!(" complete.");
+    Ok(())
 }
 
 /// Build the database from input sequences read from stdin.
@@ -279,7 +768,11 @@ pub fn build_database(opts: &mut BuildOptions) -> io::Result<()> {
     let id_map = read_id_to_taxon_map(&opts.id_to_taxon_map_filename)?;
 
     // Generate taxonomy
-    generate_taxonomy(&opts.ncbi_taxonomy_directory, &id_map, &opts.taxonomy_filename)?;
+    generate_taxonomy(
+        &opts.ncbi_taxonomy_directory,
+        &id_map,
+        &opts.taxonomy_filename,
+    )?;
     eprintln!("Taxonomy parsed and converted.");
 
     // Load taxonomy
@@ -303,62 +796,16 @@ pub fn build_database(opts: &mut BuildOptions) -> io::Result<()> {
     };
 
     let hash = CompactHashTable::new(actual_capacity, 32 - bits_for_taxid, bits_for_taxid);
-    eprintln!("CHT created with {} bits reserved for taxid.", bits_for_taxid);
-
-    // Process sequences from stdin
-    let mut reader = BatchSequenceReader::new(None)?;
-    let mut scanner = MinimizerScanner::new(
-        opts.k as isize,
-        opts.l as isize,
-        opts.spaced_seed_mask,
-        !opts.input_is_protein,
-        opts.toggle_mask,
-        CURRENT_REVCOM_VERSION,
+    eprintln!(
+        "CHT created with {} bits reserved for taxid.",
+        bits_for_taxid
     );
 
-    let mut processed_seq_ct = 0usize;
-    let mut processed_ch_ct = 0usize;
-
-    while reader.load_block(opts.block_size) {
-        while let Some(seq) = reader.next_sequence() {
-            let all_ids = extract_ncbi_sequence_ids(&seq.header);
-            let mut taxid: TaxId = 0;
-            for seqid in &all_ids {
-                if let Some(&ext_taxid) = id_map.get(seqid) {
-                    if ext_taxid != 0 {
-                        taxid = taxonomy.lowest_common_ancestor(
-                            taxid,
-                            taxonomy.get_internal_id(ext_taxid),
-                        );
-                    }
-                }
-            }
-            if taxid != 0 {
-                let mut seq_str = seq.seq.clone();
-                if opts.input_is_protein && !seq_str.ends_with('*') {
-                    seq_str.push('*');
-                }
-                if opts.deterministic_build {
-                    process_sequence_deterministic(
-                        &seq_str, taxid as HValue, &hash, &taxonomy, opts,
-                    );
-                } else {
-                    process_sequence_fast(
-                        &seq_str, taxid as HValue, &hash, &taxonomy,
-                        &mut scanner, opts.min_clear_hash_value,
-                    );
-                }
-                processed_seq_ct += 1;
-                processed_ch_ct += seq_str.len();
-            }
-        }
-        eprint!("\rProcessed {} sequences ({} {})...",
-            processed_seq_ct, processed_ch_ct,
-            if opts.input_is_protein { "aa" } else { "bp" });
+    if opts.deterministic_build {
+        process_sequences(opts, &id_map, &hash, &taxonomy)?;
+    } else {
+        process_sequences_fast(opts, &id_map, &hash, &taxonomy)?;
     }
-    eprintln!("\nCompleted processing of {} sequences, {} {}",
-        processed_seq_ct, processed_ch_ct,
-        if opts.input_is_protein { "aa" } else { "bp" });
 
     // Write outputs
     eprint!("Writing data to disk... ");
@@ -373,9 +820,60 @@ pub fn build_database(opts: &mut BuildOptions) -> io::Result<()> {
     index_opts.minimum_acceptable_hash_value = opts.min_clear_hash_value;
     index_opts.revcom_version = CURRENT_REVCOM_VERSION;
 
-    index_opts.write_to_file(&opts.options_filename)
+    index_opts
+        .write_to_file(&opts.options_filename)
         .expect("Failed to write index options");
     eprintln!(" complete.");
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_build_db_parse_command_line() {
+        let args = vec![
+            "build_db".to_string(),
+            "-H".to_string(),
+            "hash.k2d".to_string(),
+            "-m".to_string(),
+            "map.txt".to_string(),
+            "-t".to_string(),
+            "taxo.k2d".to_string(),
+            "-n".to_string(),
+            "taxonomy".to_string(),
+            "-o".to_string(),
+            "opts.k2d".to_string(),
+            "-k".to_string(),
+            "35".to_string(),
+            "-l".to_string(),
+            "31".to_string(),
+            "-c".to_string(),
+            "1000".to_string(),
+            "-F".to_string(),
+            "-X".to_string(),
+        ];
+        let mut opts = BuildOptions::default();
+        parse_command_line(&args, &mut opts).unwrap();
+        assert_eq!(opts.hashtable_filename, "hash.k2d");
+        assert_eq!(opts.id_to_taxon_map_filename, "map.txt");
+        assert_eq!(opts.taxonomy_filename, "taxo.k2d");
+        assert_eq!(opts.ncbi_taxonomy_directory, "taxonomy");
+        assert_eq!(opts.options_filename, "opts.k2d");
+        assert_eq!(opts.k, 35);
+        assert_eq!(opts.l, 31);
+        assert_eq!(opts.capacity, 1000);
+        assert!(!opts.deterministic_build);
+        assert!(opts.input_is_protein);
+    }
+
+    #[test]
+    fn test_build_db_usage() {
+        let text = usage(0);
+        assert!(text.contains("Usage: build_db <options>"));
+        assert!(text.contains("* -H FILENAME"));
+        assert!(text.contains("-F            Use fast, nondeterministic building method"));
+    }
 }

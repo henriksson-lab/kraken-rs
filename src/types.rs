@@ -58,9 +58,8 @@ impl IndexOptions {
         let mut file = File::open(filename)?;
         let mut opts = Self::new();
         let size = std::mem::size_of::<Self>();
-        let buf = unsafe {
-            std::slice::from_raw_parts_mut(&mut opts as *mut Self as *mut u8, size)
-        };
+        let buf =
+            unsafe { std::slice::from_raw_parts_mut(&mut opts as *mut Self as *mut u8, size) };
         file.read_exact(buf)?;
         Ok(opts)
     }
@@ -71,9 +70,7 @@ impl IndexOptions {
         use std::io::Write;
         let mut file = File::create(filename)?;
         let size = std::mem::size_of::<Self>();
-        let buf = unsafe {
-            std::slice::from_raw_parts(self as *const Self as *const u8, size)
-        };
+        let buf = unsafe { std::slice::from_raw_parts(self as *const Self as *const u8, size) };
         file.write_all(buf)
     }
 }
@@ -117,21 +114,25 @@ impl CompactHashCell {
     }
 
     #[inline]
-    pub fn populate(&mut self, compacted_key: HKey, val: HValue, _key_bits: usize, value_bits: usize) {
+    pub fn populate(
+        &mut self,
+        compacted_key: HKey,
+        val: HValue,
+        _key_bits: usize,
+        value_bits: usize,
+    ) {
         self.data = ((compacted_key as u32) << value_bits) | val;
     }
 }
 
 /// Sequence format (FASTA or FASTQ).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[derive(Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum SequenceFormat {
     #[default]
     AutoDetect,
     Fasta,
     Fastq,
 }
-
 
 /// A biological sequence with header, comment, bases, and optional quality scores.
 #[derive(Debug, Clone, Default)]
@@ -176,7 +177,6 @@ impl Sequence {
         }
         s
     }
-
 }
 
 impl std::fmt::Display for Sequence {
@@ -239,7 +239,10 @@ mod tests {
 
         let ref_bytes = std::fs::read(&ref_path).unwrap();
         let rust_bytes = std::fs::read(tmp.path()).unwrap();
-        assert_eq!(ref_bytes, rust_bytes, "IndexOptions roundtrip differs from C++ reference");
+        assert_eq!(
+            ref_bytes, rust_bytes,
+            "IndexOptions roundtrip differs from C++ reference"
+        );
     }
 
     #[test]

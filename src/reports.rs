@@ -1,5 +1,5 @@
 use std::fs::File;
-use std::io::{self, Write, BufWriter};
+use std::io::{self, BufWriter, Write};
 
 use crate::readcounts::{ReadCounter, TaxonCounters};
 use crate::taxonomy::Taxonomy;
@@ -59,6 +59,10 @@ fn rank_to_kraken_code(rank: &str) -> Option<char> {
     }
 }
 
+pub fn print_mpa_style_report_line(ofs: &mut dyn Write, clade_count: u64, taxonomy_line: &str) {
+    writeln!(ofs, "{}\t{}", taxonomy_line, clade_count).ok();
+}
+
 /// MPA-style report DFS.
 fn mpa_report_dfs(
     taxid: u64,
@@ -79,11 +83,11 @@ fn mpa_report_dfs(
 
     if let Some(code) = rank_code {
         let name = taxonomy.name_at_offset(node.name_offset);
-        let entry = format!("{}__{}",  code, name);
+        let entry = format!("{}__{}", code, name);
         taxonomy_names.push(entry);
 
         let taxonomy_line = taxonomy_names.join("|");
-        writeln!(ofs, "{}\t{}", taxonomy_line, clade_count).ok();
+        print_mpa_style_report_line(ofs, clade_count, &taxonomy_line);
     }
 
     if node.child_count != 0 {
@@ -96,7 +100,14 @@ fn mpa_report_dfs(
             cb.cmp(&ca)
         });
         for child in children {
-            mpa_report_dfs(child, ofs, report_zeros, taxonomy, clade_counts, taxonomy_names);
+            mpa_report_dfs(
+                child,
+                ofs,
+                report_zeros,
+                taxonomy,
+                clade_counts,
+                taxonomy_names,
+            );
         }
     }
 
@@ -121,7 +132,14 @@ pub fn report_mpa_style(
     let file = File::create(filename)?;
     let mut ofs = BufWriter::new(file);
     let mut taxonomy_names = Vec::new();
-    mpa_report_dfs(1, &mut ofs, report_zeros, taxonomy, &clade_counts, &mut taxonomy_names);
+    mpa_report_dfs(
+        1,
+        &mut ofs,
+        report_zeros,
+        taxonomy,
+        &clade_counts,
+        &mut taxonomy_names,
+    );
     Ok(())
 }
 
@@ -144,9 +162,22 @@ fn print_kraken_style_report_line(
     };
 
     // Match C++ sprintf("%6.2f", ...) exactly
-    write!(ofs, "{:6.2}\t{}\t{}\t", pct, clade_counter.read_count(), taxon_counter.read_count()).ok();
+    write!(
+        ofs,
+        "{:6.2}\t{}\t{}\t",
+        pct,
+        clade_counter.read_count(),
+        taxon_counter.read_count()
+    )
+    .ok();
     if report_kmer_data {
-        write!(ofs, "{}\t{}\t", clade_counter.kmer_count(), clade_counter.distinct_kmer_count()).ok();
+        write!(
+            ofs,
+            "{}\t{}\t",
+            clade_counter.kmer_count(),
+            clade_counter.distinct_kmer_count()
+        )
+        .ok();
     }
     write!(ofs, "{}\t{}\t", rank_str, taxid).ok();
     for _ in 0..depth {
@@ -196,9 +227,15 @@ fn kraken_report_dfs(
     let name = taxonomy.name_at_offset(node.name_offset);
 
     print_kraken_style_report_line(
-        ofs, report_kmer_data, total_seqs,
-        clade_counter, call_counter,
-        &rank_str, node.external_id as u32, name, depth,
+        ofs,
+        report_kmer_data,
+        total_seqs,
+        clade_counter,
+        call_counter,
+        &rank_str,
+        node.external_id as u32,
+        name,
+        depth,
     );
 
     if node.child_count != 0 {
@@ -223,9 +260,17 @@ fn kraken_report_dfs(
         });
         for child in children {
             kraken_report_dfs(
-                child, ofs, report_zeros, report_kmer_data, taxonomy,
-                clade_counters, call_counters, total_seqs,
-                rank_code, rank_depth, depth + 1,
+                child,
+                ofs,
+                report_zeros,
+                report_kmer_data,
+                taxonomy,
+                clade_counters,
+                call_counters,
+                total_seqs,
+                rank_code,
+                rank_depth,
+                depth + 1,
             );
         }
     }
@@ -249,17 +294,50 @@ pub fn report_kraken_style(
 
     // Special handling of unclassified
     if total_unclassified != 0 || report_zeros {
-        let rc = ReadCounter { n_reads: total_unclassified, ..Default::default() };
+        let rc = ReadCounter {
+            n_reads: total_unclassified,
+            ..Default::default()
+        };
         print_kraken_style_report_line(
-            &mut ofs, report_kmer_data, total_seqs,
-            &rc, &rc, "U", 0, "unclassified", 0,
+            &mut ofs,
+            report_kmer_data,
+            total_seqs,
+            &rc,
+            &rc,
+            "U",
+            0,
+            "unclassified",
+            0,
         );
     }
 
     kraken_report_dfs(
-        1, &mut ofs, report_zeros, report_kmer_data, taxonomy,
-        &clade_counters, call_counters, total_seqs,
-        rank_code, -1, 0,
+        1,
+        &mut ofs,
+        report_zeros,
+        report_kmer_data,
+        taxonomy,
+        &clade_counters,
+        call_counters,
+        total_seqs,
+        rank_code,
+        -1,
+        0,
     );
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_print_mpa_style_report_line() {
+        let mut out = Vec::new();
+        print_mpa_style_report_line(&mut out, 17, "d__Bacteria|p__Firmicutes");
+        assert_eq!(
+            String::from_utf8(out).unwrap(),
+            "d__Bacteria|p__Firmicutes\t17\n"
+        );
+    }
 }

@@ -1,6 +1,7 @@
 /// Translation map: AGCT ordering (not ACGT).
 /// Index = 6-bit codon (2 bits per nucleotide, A=0 G=1 C=2 T=3).
-const TRANSLATION_MAP: &[u8; 64] = b"KKNNRRSSTTTTIMIIEEDDGGGGAAAAVVVVQQHHRRRRPPPPLLLL**YY*WCCSSSSLLFF";
+const TRANSLATION_MAP: &[u8; 64] =
+    b"KKNNRRSSTTTTIMIIEEDDGGGGAAAAVVVVQQHHRRRRPPPPLLLL**YY*WCCSSSSLLFF";
 
 /// Forward lookup: maps ASCII character to 2-bit AGCT code for codon position.
 /// A/a -> 0x00, G/g -> 0x01, C/c -> 0x02, T/t -> 0x03, else -> 0xFF
@@ -37,7 +38,10 @@ pub fn translate_to_all_frames(dna_seq: &str) -> Vec<String> {
     let mut aa_seqs: Vec<Vec<u8>> = (0..6).map(|_| vec![b' '; max_size]).collect();
 
     if dna.len() < 3 {
-        return aa_seqs.into_iter().map(|v| String::from_utf8(v).unwrap()).collect();
+        return aa_seqs
+            .into_iter()
+            .map(|v| String::from_utf8(v).unwrap())
+            .collect();
     }
 
     let mut fwd_codon: u8 = 0;
@@ -96,7 +100,10 @@ pub fn translate_to_all_frames(dna_seq: &str) -> Vec<String> {
         aa_seqs[i] = aa_seqs[i][start..].to_vec();
     }
 
-    aa_seqs.into_iter().map(|v| String::from_utf8(v).unwrap()).collect()
+    aa_seqs
+        .into_iter()
+        .map(|v| String::from_utf8(v).unwrap())
+        .collect()
 }
 
 #[cfg(test)]
@@ -126,10 +133,14 @@ mod tests {
     fn test_translate_short_sequences() {
         // Sequences shorter than 3 should return space-filled frames
         let r1 = translate_to_all_frames("A");
-        assert!(r1.iter().all(|f| f.is_empty() || f.chars().all(|c| c == ' ')));
+        assert!(r1
+            .iter()
+            .all(|f| f.is_empty() || f.chars().all(|c| c == ' ')));
 
         let r2 = translate_to_all_frames("AT");
-        assert!(r2.iter().all(|f| f.is_empty() || f.chars().all(|c| c == ' ')));
+        assert!(r2
+            .iter()
+            .all(|f| f.is_empty() || f.chars().all(|c| c == ' ')));
 
         // Exactly 3 bases: frame 2 gets first codon (i=2, frame=2%3=2)
         let r3 = translate_to_all_frames("ATG");
@@ -158,7 +169,12 @@ mod tests {
         assert_eq!(r1.len(), 6);
         // All frames should have content for a sequence this long
         for (i, frame) in r1.iter().enumerate() {
-            assert!(!frame.is_empty(), "Frame {} is empty for seq len {}", i, seq.len());
+            assert!(
+                !frame.is_empty(),
+                "Frame {} is empty for seq len {}",
+                i,
+                seq.len()
+            );
         }
     }
 }

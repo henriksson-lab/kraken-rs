@@ -69,9 +69,15 @@ mod tests {
 
     #[test]
     fn test_split_string() {
-        assert_eq!(split_string("a\tb\tc", "\t", usize::MAX), vec!["a", "b", "c"]);
+        assert_eq!(
+            split_string("a\tb\tc", "\t", usize::MAX),
+            vec!["a", "b", "c"]
+        );
         assert_eq!(split_string("a\tb\tc", "\t", 2), vec!["a", "b"]);
         assert_eq!(split_string("hello", "\t", usize::MAX), vec!["hello"]);
-        assert_eq!(split_string("a::b::c", "::", usize::MAX), vec!["a", "b", "c"]);
+        assert_eq!(
+            split_string("a::b::c", "::", usize::MAX),
+            vec!["a", "b", "c"]
+        );
     }
 }
