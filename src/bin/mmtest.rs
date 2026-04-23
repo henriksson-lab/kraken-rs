@@ -1,3 +1,3 @@
 fn main() {
-    print!("{}", kraken2::mmtest::mmtest_main());
+    print!("{}", kraken2_rs::mmtest::mmtest_main());
 }

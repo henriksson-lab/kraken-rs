@@ -32,9 +32,9 @@ fn test_classify_covid_matches_reference() {
     let tmp_dir = tempfile::tempdir().unwrap();
     let output_file = tmp_dir.path().join("kraken_output.txt");
 
-    let opts = kraken2::classify::ClassifyOptions::default();
+    let opts = kraken2_rs::classify::ClassifyOptions::default();
 
-    let result = kraken2::classify::run_classify(
+    let result = kraken2_rs::classify::run_classify(
         &[input_file.to_str().unwrap().to_string()],
         hash_file.to_str().unwrap(),
         taxo_file.to_str().unwrap(),
@@ -105,9 +105,9 @@ fn test_classify_all_matches_reference() {
     let tmp_dir = tempfile::tempdir().unwrap();
     let output_file = tmp_dir.path().join("kraken_output.txt");
 
-    let opts = kraken2::classify::ClassifyOptions::default();
+    let opts = kraken2_rs::classify::ClassifyOptions::default();
 
-    let result = kraken2::classify::run_classify(
+    let result = kraken2_rs::classify::run_classify(
         &fasta_files,
         hash_file.to_str().unwrap(),
         taxo_file.to_str().unwrap(),
@@ -172,7 +172,7 @@ fn test_load_reference_taxonomy() {
     }
 
     let mut taxonomy =
-        kraken2::taxonomy::Taxonomy::from_file(taxo_file.to_str().unwrap(), false).unwrap();
+        kraken2_rs::taxonomy::Taxonomy::from_file(taxo_file.to_str().unwrap(), false).unwrap();
     taxonomy.generate_external_to_internal_id_map();
 
     // 38 sequences + ancestors + root = 40 nodes (39 marked + node 0)
@@ -204,7 +204,7 @@ fn test_load_reference_hash_table() {
     }
 
     let hash =
-        kraken2::compact_hash::CompactHashTable::from_file(hash_file.to_str().unwrap(), false)
+        kraken2_rs::compact_hash::CompactHashTable::from_file(hash_file.to_str().unwrap(), false)
             .unwrap();
 
     assert_eq!(hash.capacity(), 92526);
@@ -224,7 +224,7 @@ fn test_read_reference_index_options() {
         return;
     }
 
-    let opts = kraken2::types::IndexOptions::read_from_file(opts_file.to_str().unwrap())
+    let opts = kraken2_rs::types::IndexOptions::read_from_file(opts_file.to_str().unwrap())
         .expect("Failed to read index options");
 
     assert_eq!(opts.k, 35);
@@ -257,9 +257,9 @@ fn test_classify_gzip_input() {
     encoder.finish().unwrap();
 
     let output_file = tmp_dir.path().join("kraken_output.txt");
-    let opts = kraken2::classify::ClassifyOptions::default();
+    let opts = kraken2_rs::classify::ClassifyOptions::default();
 
-    let result = kraken2::classify::run_classify(
+    let result = kraken2_rs::classify::run_classify(
         &[gz_input.to_str().unwrap().to_string()],
         hash_file.to_str().unwrap(),
         taxo_file.to_str().unwrap(),

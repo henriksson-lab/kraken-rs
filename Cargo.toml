@@ -1,12 +1,12 @@
 [package]
-name = "kraken2"
+name = "kraken2-rs"
 version = "0.1.0"
 edition = "2021"
 description = "Taxonomic sequence classification system — Rust port of Kraken 2"
 license = "MIT"
 repository = "https://github.com/henriksson-lab/kraken-rs"
 homepage = "https://github.com/henriksson-lab/kraken-rs"
-documentation = "https://docs.rs/kraken2"
+documentation = "https://docs.rs/kraken2-rs"
 keywords = ["bioinformatics", "kraken", "taxonomy", "metagenomics", "classification"]
 categories = ["science", "command-line-utilities"]
 include = [
@@ -20,7 +20,7 @@ include = [
 ]
 
 [lib]
-name = "kraken2"
+name = "kraken2_rs"
 path = "src/lib.rs"
 
 [[bin]]

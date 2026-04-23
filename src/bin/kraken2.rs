@@ -1,14 +1,14 @@
 use clap::{Parser, Subcommand};
 use std::process;
 
-use kraken2::build_db;
-use kraken2::blast;
-use kraken2::classify;
-use kraken2::dump_table;
-use kraken2::dust;
-use kraken2::estimate;
-use kraken2::lookup;
-use kraken2::mmtest;
+use kraken2_rs::build_db;
+use kraken2_rs::blast;
+use kraken2_rs::classify;
+use kraken2_rs::dump_table;
+use kraken2_rs::dust;
+use kraken2_rs::estimate;
+use kraken2_rs::lookup;
+use kraken2_rs::mmtest;
 
 #[derive(Parser)]
 #[command(name = "kraken2", about = "Taxonomic sequence classification system")]
@@ -612,7 +612,7 @@ fn main() {
 
             // Load taxonomy
             let mut taxonomy =
-                match kraken2::taxonomy::Taxonomy::from_file(&taxo_file, memory_mapping) {
+                match kraken2_rs::taxonomy::Taxonomy::from_file(&taxo_file, memory_mapping) {
                     Ok(t) => t,
                     Err(e) => {
                         eprintln!("Error loading taxonomy: {}", e);
@@ -622,7 +622,7 @@ fn main() {
             taxonomy.generate_external_to_internal_id_map();
 
             // Load hash table
-            let hash = match kraken2::compact_hash::CompactHashTable::from_file(
+            let hash = match kraken2_rs::compact_hash::CompactHashTable::from_file(
                 &hash_file,
                 memory_mapping,
             ) {
@@ -635,7 +635,7 @@ fn main() {
 
             if skip_counts {
                 println!("Database options:");
-                if let Ok(idx_opts) = kraken2::types::IndexOptions::read_from_file(&opts_file) {
+                if let Ok(idx_opts) = kraken2_rs::types::IndexOptions::read_from_file(&opts_file) {
                     println!("  k = {}", idx_opts.k);
                     println!("  l = {}", idx_opts.l);
                     println!("  DNA database: {}", idx_opts.dna_db);
@@ -646,7 +646,7 @@ fn main() {
             } else {
                 // Get value counts and produce report
                 let value_counts = hash.get_value_counts();
-                let mut taxon_counters = kraken2::readcounts::TaxonCounters::new();
+                let mut taxon_counters = kraken2_rs::readcounts::TaxonCounters::new();
                 for (&taxid, &count) in &value_counts {
                     let counter = taxon_counters.entry(taxid).or_default();
                     counter.n_reads = count;
@@ -654,14 +654,14 @@ fn main() {
 
                 let total = value_counts.values().sum::<u64>();
                 if use_mpa_style {
-                    let _ = kraken2::reports::report_mpa_style(
+                    let _ = kraken2_rs::reports::report_mpa_style(
                         "/dev/stdout",
                         report_zero_counts,
                         &taxonomy,
                         &taxon_counters,
                     );
                 } else {
-                    let _ = kraken2::reports::report_kraken_style(
+                    let _ = kraken2_rs::reports::report_kraken_style(
                         "/dev/stdout",
                         report_zero_counts,
                         false,
@@ -682,13 +682,13 @@ fn main() {
             skip_maps,
         } => {
             if taxonomy {
-                if let Err(e) = kraken2::download::download_taxonomy(&db, skip_maps, protein) {
+                if let Err(e) = kraken2_rs::download::download_taxonomy(&db, skip_maps, protein) {
                     eprintln!("Error downloading taxonomy: {e}");
                     process::exit(1);
                 }
             }
             if let Some(ref lib_type) = library {
-                if let Err(e) = kraken2::download::download_library(&db, lib_type, protein) {
+                if let Err(e) = kraken2_rs::download::download_library(&db, lib_type, protein) {
                     eprintln!("Error downloading library: {e}");
                     process::exit(1);
                 }
@@ -700,7 +700,7 @@ fn main() {
         }
 
         Commands::Clean { db } => {
-            if let Err(e) = kraken2::download::clean_db(&db) {
+            if let Err(e) = kraken2_rs::download::clean_db(&db) {
                 eprintln!("Error cleaning database: {e}");
                 process::exit(1);
             }
