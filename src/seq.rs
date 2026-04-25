@@ -13,7 +13,11 @@ pub struct BatchSequenceReader {
     curr: usize,
     size: usize,
     file_format: SequenceFormat,
+    /// If set, the next record's header line has already been read.
     peeked_line: Option<String>,
+    /// Scratch buffer reused across `read_line` calls — avoids allocating
+    /// a fresh String per FASTA/FASTQ line in the hot path.
+    line_buf: String,
 }
 
 /// Open a file, auto-detecting compression from extension.
@@ -44,6 +48,7 @@ impl BatchSequenceReader {
             size: 0,
             file_format: SequenceFormat::AutoDetect,
             peeked_line: None,
+            line_buf: String::new(),
         })
     }
 
@@ -66,6 +71,7 @@ impl BatchSequenceReader {
             size: 0,
             file_format: SequenceFormat::AutoDetect,
             peeked_line: None,
+            line_buf: String::new(),
         }
     }
 
@@ -80,14 +86,17 @@ impl BatchSequenceReader {
             if self.size >= self.seqs.len() {
                 self.seqs.push(Sequence::default());
             }
-            if let Some(seq) = self.read_one() {
-                let seq_len = seq.seq.len();
-                self.seqs[self.size] = seq;
-                self.size += 1;
-                total += seq_len;
-            } else {
+            // Take ownership of the slot temporarily so we can pass &mut Sequence
+            // without simultaneously borrowing &mut self.
+            let mut slot = std::mem::take(&mut self.seqs[self.size]);
+            let ok = self.read_one_into(&mut slot);
+            let seq_len = slot.seq.len();
+            self.seqs[self.size] = slot;
+            if !ok {
                 break;
             }
+            self.size += 1;
+            total += seq_len;
         }
 
         self.size > 0
@@ -96,17 +105,20 @@ impl BatchSequenceReader {
     /// Load a batch of exactly `record_count` sequences.
     /// Returns true if at least one sequence was loaded.
     pub fn load_batch(&mut self, record_count: usize) -> bool {
-        self.seqs.resize_with(record_count, Sequence::default);
+        if self.seqs.len() < record_count {
+            self.seqs.resize_with(record_count, Sequence::default);
+        }
         self.curr = 0;
         self.size = 0;
 
         for i in 0..record_count {
-            if let Some(seq) = self.read_one() {
-                self.seqs[i] = seq;
-                self.size += 1;
-            } else {
+            let mut slot = std::mem::take(&mut self.seqs[i]);
+            let ok = self.read_one_into(&mut slot);
+            self.seqs[i] = slot;
+            if !ok {
                 break;
             }
+            self.size += 1;
         }
 
         self.size > 0
@@ -131,96 +143,127 @@ impl BatchSequenceReader {
     /// Mimics kseq.h behavior: header is text after @/> up to whitespace,
     /// comment is the rest of the header line.
     fn read_one(&mut self) -> Option<Sequence> {
-        // Get the header line (starts with > or @)
-        let header_line = match self.peeked_line.take() {
-            Some(line) => line,
-            None => {
-                let mut line = String::new();
-                loop {
-                    line.clear();
-                    match self.reader.read_line(&mut line) {
-                        Ok(0) => return None,
-                        Ok(_) => {
-                            let trimmed = line.trim_end_matches(['\n', '\r']);
-                            if trimmed.starts_with('>') || trimmed.starts_with('@') {
-                                break trimmed.to_string();
-                            }
-                            // Skip blank lines before header
+        let mut s = Sequence::default();
+        if self.read_one_into(&mut s) {
+            Some(s)
+        } else {
+            None
+        }
+    }
+
+    /// Refill an existing `Sequence` from the stream, reusing its String
+    /// buffers. Returns false on EOF or read error. Hot path during classify.
+    fn read_one_into(&mut self, out: &mut Sequence) -> bool {
+        out.header.clear();
+        out.comment.clear();
+        out.seq.clear();
+        out.quals.clear();
+
+        // Get the header line (starts with > or @). If we previously peeked
+        // a header line, swap it into line_buf so we can parse it without
+        // allocating.
+        if let Some(peeked) = self.peeked_line.take() {
+            self.line_buf = peeked;
+        } else {
+            loop {
+                self.line_buf.clear();
+                match self.reader.read_line(&mut self.line_buf) {
+                    Ok(0) => return false,
+                    Ok(_) => {
+                        trim_eol_in_place(&mut self.line_buf);
+                        if self.line_buf.starts_with('>') || self.line_buf.starts_with('@') {
+                            break;
                         }
-                        Err(_) => return None,
+                        // Skip blank / non-header lines before the first header
                     }
+                    Err(_) => return false,
                 }
             }
-        };
+        }
 
-        let is_fastq = header_line.starts_with('@');
+        let is_fastq = self.line_buf.starts_with('@');
         let format = if is_fastq {
             SequenceFormat::Fastq
         } else {
             SequenceFormat::Fasta
         };
         self.file_format = format;
+        out.format = format;
 
-        // Parse header: first word is name, rest is comment
-        let content = &header_line[1..]; // skip > or @
-        let (header, comment) = match content.find(|c: char| c.is_whitespace()) {
-            Some(pos) => (content[..pos].to_string(), content[pos + 1..].to_string()),
-            None => (content.to_string(), String::new()),
-        };
+        // Parse header: first word is name, rest is comment.
+        // line_buf contains "@name comment..." or ">name comment..."
+        let content = &self.line_buf[1..];
+        match content.bytes().position(|b| b == b' ' || b == b'\t') {
+            Some(pos) => {
+                out.header.push_str(&content[..pos]);
+                out.comment.push_str(content[pos..].trim_start());
+            }
+            None => {
+                out.header.push_str(content);
+            }
+        }
 
         // Read sequence lines
-        let mut seq = String::new();
-        let mut line = String::new();
         loop {
-            line.clear();
-            match self.reader.read_line(&mut line) {
+            self.line_buf.clear();
+            match self.reader.read_line(&mut self.line_buf) {
                 Ok(0) => break,
                 Ok(_) => {
-                    let trimmed = line.trim_end_matches(['\n', '\r']);
-                    if trimmed.starts_with('>')
-                        || trimmed.starts_with('@')
-                        || trimmed.starts_with('+')
-                    {
-                        if is_fastq && trimmed.starts_with('+') {
-                            // This is the quality separator line
+                    trim_eol_in_place(&mut self.line_buf);
+                    let first = self.line_buf.as_bytes().first().copied();
+                    if first == Some(b'>') || first == Some(b'@') || first == Some(b'+') {
+                        if is_fastq && first == Some(b'+') {
+                            // FASTQ quality separator line
                             break;
                         }
-                        if trimmed.starts_with('>') || trimmed.starts_with('@') {
-                            // Next record's header — save for next call
-                            self.peeked_line = Some(trimmed.to_string());
+                        if first == Some(b'>') || first == Some(b'@') {
+                            // Next record's header — stash for the next call.
+                            // Move out of line_buf to avoid copy.
+                            let stash = std::mem::take(&mut self.line_buf);
+                            self.peeked_line = Some(stash);
                             break;
                         }
                     }
-                    seq.push_str(trimmed);
+                    out.seq.push_str(&self.line_buf);
                 }
                 Err(_) => break,
             }
         }
 
         // Read quality lines (FASTQ only)
-        let mut quals = String::new();
         if is_fastq {
-            while quals.len() < seq.len() {
-                line.clear();
-                match self.reader.read_line(&mut line) {
+            while out.quals.len() < out.seq.len() {
+                self.line_buf.clear();
+                match self.reader.read_line(&mut self.line_buf) {
                     Ok(0) => break,
                     Ok(_) => {
-                        let trimmed = line.trim_end_matches(['\n', '\r']);
-                        quals.push_str(trimmed);
+                        trim_eol_in_place(&mut self.line_buf);
+                        out.quals.push_str(&self.line_buf);
                     }
                     Err(_) => break,
                 }
             }
         }
 
-        Some(Sequence {
-            format,
-            header,
-            comment,
-            seq,
-            quals,
-        })
+        true
     }
+}
+
+/// Trim trailing CR/LF from a String in place — avoids the slice allocation
+/// that `trim_end_matches` would produce when the caller already needs to
+/// mutate the String.
+fn trim_eol_in_place(s: &mut String) {
+    let bytes = s.as_bytes();
+    let mut end = bytes.len();
+    while end > 0 {
+        let b = bytes[end - 1];
+        if b == b'\n' || b == b'\r' {
+            end -= 1;
+        } else {
+            break;
+        }
+    }
+    s.truncate(end);
 }
 
 #[cfg(test)]

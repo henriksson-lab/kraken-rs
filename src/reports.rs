@@ -155,11 +155,7 @@ fn print_kraken_style_report_line(
     sci_name: &str,
     depth: usize,
 ) {
-    let pct = if total_seqs > 0 {
-        100.0 * clade_counter.read_count() as f64 / total_seqs as f64
-    } else {
-        0.0
-    };
+    let pct = 100.0 * clade_counter.read_count() as f64 / total_seqs as f64;
 
     // Match C++ sprintf("%6.2f", ...) exactly
     write!(

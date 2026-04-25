@@ -1,14 +1,89 @@
 use crate::types::*;
-use std::collections::VecDeque;
 
+#[derive(Clone, Copy)]
 struct MinimizerData {
     candidate: u64,
     pos: isize,
 }
 
+/// Sliding-window deque for minimizer candidates.
+///
+/// The window can hold at most `k - l + 1` entries; for any realistic
+/// `(k, l)` pair this is well below 64. We use a fixed-size inline buffer
+/// with a power-of-two capacity so the wrap-around indexing compiles to a
+/// bitwise AND. Replaces `std::collections::VecDeque` from earlier revisions
+/// to remove a level of indirection and a bounds-check from the inner loop.
+const Q_CAP: usize = 64;
+const Q_MASK: usize = Q_CAP - 1;
+
+struct MinQueue {
+    data: [MinimizerData; Q_CAP],
+    head: usize,
+    len: usize,
+}
+
+impl MinQueue {
+    #[inline]
+    fn new() -> Self {
+        Self {
+            data: [MinimizerData {
+                candidate: 0,
+                pos: 0,
+            }; Q_CAP],
+            head: 0,
+            len: 0,
+        }
+    }
+
+    #[inline]
+    fn clear(&mut self) {
+        self.head = 0;
+        self.len = 0;
+    }
+
+    #[inline]
+    fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+
+    #[inline]
+    fn front(&self) -> &MinimizerData {
+        debug_assert!(self.len > 0);
+        unsafe { self.data.get_unchecked(self.head & Q_MASK) }
+    }
+
+    #[inline]
+    fn back(&self) -> &MinimizerData {
+        debug_assert!(self.len > 0);
+        unsafe { self.data.get_unchecked((self.head + self.len - 1) & Q_MASK) }
+    }
+
+    #[inline]
+    fn push_back(&mut self, x: MinimizerData) {
+        debug_assert!(self.len < Q_CAP);
+        let idx = (self.head + self.len) & Q_MASK;
+        unsafe {
+            *self.data.get_unchecked_mut(idx) = x;
+        }
+        self.len += 1;
+    }
+
+    #[inline]
+    fn pop_back(&mut self) {
+        debug_assert!(self.len > 0);
+        self.len -= 1;
+    }
+
+    #[inline]
+    fn pop_front(&mut self) {
+        debug_assert!(self.len > 0);
+        self.head = (self.head + 1) & Q_MASK;
+        self.len -= 1;
+    }
+}
+
 /// Minimizer scanner — extracts minimizers from DNA or protein sequences.
 /// Exact port of C++ `MinimizerScanner` from `mmscanner.h/cc`.
-/// Uses SIMD-accelerated preprocessing on x86_64 for DNA sequences.
 pub struct MinimizerScanner {
     seq: Vec<u8>,
     k: isize,
@@ -23,7 +98,7 @@ pub struct MinimizerScanner {
     lmer_mask: u64,
     last_minimizer: u64,
     loaded_ch: isize,
-    queue: VecDeque<MinimizerData>,
+    queue: MinQueue,
     queue_pos: isize,
     last_ambig: u64,
     lookup_table: [u8; 256],
@@ -99,7 +174,7 @@ impl MinimizerScanner {
             lmer_mask,
             last_minimizer: !0u64,
             loaded_ch: 0,
-            queue: VecDeque::new(),
+            queue: MinQueue::new(),
             queue_pos: 0,
             last_ambig: 0,
             lookup_table,
@@ -136,17 +211,28 @@ impl MinimizerScanner {
     }
 
     /// Returns the next minimizer, or None if exhausted.
+    #[inline]
     pub fn next_minimizer(&mut self) -> Option<u64> {
+        if self.dna {
+            self.next_minimizer_inner::<{ BITS_PER_CHAR_DNA as u32 }, true>()
+        } else {
+            self.next_minimizer_inner::<{ BITS_PER_CHAR_PRO as u32 }, false>()
+        }
+    }
+
+    /// Inner body of `next_minimizer` parameterized on the alphabet so LLVM
+    /// can constant-fold `bits_per_char` (shift amounts) and the DNA branch.
+    /// Also inlined into both monomorphizations.
+    #[inline]
+    fn next_minimizer_inner<const BITS: u32, const DNA: bool>(&mut self) -> Option<u64> {
         if self.str_pos >= self.finish {
             return None;
         }
 
-        let bits_per_char = if self.dna {
-            BITS_PER_CHAR_DNA
-        } else {
-            BITS_PER_CHAR_PRO
-        };
-        let ambig_code: u64 = (1u64 << bits_per_char) - 1;
+        const fn ambig(bits: u32) -> u64 {
+            (1u64 << bits) - 1
+        }
+        let ambig_code: u64 = ambig(BITS);
         let mut changed_minimizer = false;
 
         while !changed_minimizer {
@@ -156,8 +242,8 @@ impl MinimizerScanner {
             }
             while self.loaded_ch < self.l && self.str_pos < self.finish {
                 self.loaded_ch += 1;
-                self.lmer <<= bits_per_char;
-                self.last_ambig <<= bits_per_char;
+                self.lmer <<= BITS;
+                self.last_ambig <<= BITS;
 
                 // Safety: str_pos < finish <= seq.len(), and lookup_table has 256 entries covering all u8
                 let lookup_code = unsafe {
@@ -188,7 +274,7 @@ impl MinimizerScanner {
                 return None;
             }
 
-            let canonical_lmer = if self.dna {
+            let canonical_lmer = if DNA {
                 self.canonical_representation(self.lmer, self.l as u8)
             } else {
                 self.lmer
@@ -208,22 +294,20 @@ impl MinimizerScanner {
             }
 
             // Sliding window minimum
-            while !self.queue.is_empty() && self.queue.back().unwrap().candidate > candidate_lmer {
+            while !self.queue.is_empty() && self.queue.back().candidate > candidate_lmer {
                 self.queue.pop_back();
             }
-
-            let data = MinimizerData {
-                candidate: candidate_lmer,
-                pos: self.queue_pos,
-            };
 
             if self.queue.is_empty() && self.queue_pos >= self.k - self.l {
                 changed_minimizer = true;
             }
 
-            self.queue.push_back(data);
+            self.queue.push_back(MinimizerData {
+                candidate: candidate_lmer,
+                pos: self.queue_pos,
+            });
 
-            if self.queue.front().unwrap().pos < self.queue_pos - self.k + self.l {
+            if self.queue.front().pos < self.queue_pos - self.k + self.l {
                 self.queue.pop_front();
                 changed_minimizer = true;
             }
@@ -238,18 +322,20 @@ impl MinimizerScanner {
             }
         }
 
-        assert!(!self.queue.is_empty());
-        self.last_minimizer = self.queue.front().unwrap().candidate ^ self.toggle_mask;
+        debug_assert!(!self.queue.is_empty());
+        self.last_minimizer = self.queue.front().candidate ^ self.toggle_mask;
         Some(self.last_minimizer)
     }
 
     /// Check if the current minimizer position is ambiguous.
+    #[inline]
     pub fn is_ambiguous(&self) -> bool {
         self.queue_pos < self.k - self.l || self.last_ambig != 0
     }
 
     /// Reverse complement of a k-mer (DNA only).
     /// Exact port of C++ `MinimizerScanner::reverse_complement()`.
+    #[inline]
     fn reverse_complement(&self, mut kmer: u64, n: u8) -> u64 {
         // Reverse bit pairs
         kmer = ((kmer & 0xCCCCCCCCCCCCCCCC) >> 2) | ((kmer & 0x3333333333333333) << 2);
@@ -267,6 +353,7 @@ impl MinimizerScanner {
     }
 
     /// Canonical representation = min(kmer, reverse_complement(kmer)).
+    #[inline]
     fn canonical_representation(&self, kmer: u64, n: u8) -> u64 {
         let revcom = self.reverse_complement(kmer, n);
         if kmer < revcom {

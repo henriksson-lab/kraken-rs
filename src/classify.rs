@@ -613,11 +613,19 @@ pub fn resolve_tree(
 /// Format the hit list string from the taxa vector.
 /// Exact port of C++ `AddHitlistString()`.
 pub fn add_hitlist_string(taxa: &[TaxId], taxonomy: &Taxonomy) -> String {
+    let mut result = String::new();
+    append_hitlist_string(taxa, taxonomy, &mut result);
+    result
+}
+
+/// Same as [`add_hitlist_string`] but appends directly to an existing buffer,
+/// avoiding the per-read String allocation.
+pub fn append_hitlist_string(taxa: &[TaxId], taxonomy: &Taxonomy, out: &mut String) {
     if taxa.is_empty() {
-        return "0:0".to_string();
+        out.push_str("0:0");
+        return;
     }
 
-    let mut result = String::new();
     let mut last_code = taxa[0];
     let mut code_count = 1u32;
 
@@ -626,15 +634,12 @@ pub fn add_hitlist_string(taxa: &[TaxId], taxonomy: &Taxonomy) -> String {
         if code == last_code {
             code_count += 1;
         } else {
-            append_hitlist_entry(&mut result, last_code, code_count, taxonomy, true);
+            append_hitlist_entry(out, last_code, code_count, taxonomy, true);
             code_count = 1;
             last_code = code;
         }
     }
-    // Last entry (no trailing space for non-border entries)
-    append_hitlist_entry(&mut result, last_code, code_count, taxonomy, false);
-
-    result
+    append_hitlist_entry(out, last_code, code_count, taxonomy, false);
 }
 
 fn append_hitlist_entry(
@@ -718,7 +723,6 @@ pub fn classify_sequence(
     let frame_ct = if opts.use_translated_search { 6 } else { 1 };
     let mut minimizer_hit_groups: i64 = 0;
     let mut call: TaxId = 0;
-    let mut quick_exit = false;
 
     'mate_loop: for mate_num in 0..2 {
         if mate_num == 1 && !opts.paired_end_processing {
@@ -780,7 +784,6 @@ pub fn classify_sequence(
                     if taxon != 0 {
                         if opts.quick_mode && minimizer_hit_groups >= opts.minimum_hit_groups {
                             call = taxon;
-                            quick_exit = true;
                             break 'mate_loop;
                         }
                         *hit_counts.entry(taxon).or_insert(0) += 1;
@@ -809,9 +812,7 @@ pub fn classify_sequence(
         total_kmers = total_kmers.saturating_sub(frame_markers);
     }
 
-    if !quick_exit {
-        call = resolve_tree(hit_counts, taxonomy, total_kmers, opts.confidence_threshold);
-    }
+    call = resolve_tree(hit_counts, taxonomy, total_kmers, opts.confidence_threshold);
 
     // Void call if too few hit groups
     if call != 0 && minimizer_hit_groups < opts.minimum_hit_groups {
@@ -858,12 +859,10 @@ pub fn classify_sequence(
     }
     koss.push('\t');
 
-    if opts.quick_mode && quick_exit {
+    if opts.quick_mode {
         let _ = write!(koss, "{}:Q", ext_call);
-    } else if taxa.is_empty() {
-        koss.push_str("0:0");
     } else {
-        koss.push_str(&add_hitlist_string(taxa, taxonomy));
+        append_hitlist_string(taxa, taxonomy, koss);
     }
     koss.push('\n');
 

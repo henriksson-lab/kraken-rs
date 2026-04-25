@@ -4,6 +4,7 @@ A Rust port of [Kraken 2](https://github.com/DerrickWood/kraken2) — a taxonomi
 
 This crate provides both a command-line tool and a library for classifying biological sequences against a Kraken 2 database.
 
+* 2026-04-25: Furether optimization; maybe 20% faster than Kraken2 if lucky (not broken down by step - should be analyzed further). Further auditing done
 * 2026-04-23: Possibly ready for real world data. If you decide to use it, ensure to compare the output on our own data with the original Kraken 2 software, as bugs may still remain
 * Possibly about 10% faster than the original (on par)
 
@@ -201,13 +202,19 @@ while let Some(minimizer) = scanner.next_minimizer() {
 
 The current stored benchmark is in [BENCHMARKS.md](BENCHMARKS.md).
 
-At the moment, the most recent real-data `classify` benchmark on a `600,000` read-pair subset from `/husky/henriksson/atrandi/rawdata/241206_novaseq_wgs3/filtered` shows Rust slightly faster than the original C++ on the repository reference DB:
+The most recent real-data `classify` benchmark uses a `5,000,000` read-pair subset (`1,510 Mbp` per mate) from `/husky/henriksson/atrandi/rawdata/241206_novaseq_wgs3/filtered`, taskset-pinned to 16 cores, 3 interleaved trials per row, output to `/dev/null`, against the repository reference DB:
 
-- `-p 1`: C++ `22.54 s`, Rust `19.68 s`
-- `-p 4`: C++ `6.73 s`, Rust `5.82 s`
-- peak RSS on a measured `-p 4` run: C++ `187,568 kB`, Rust `59,812 kB` (`68.1%` less for Rust)
+| Threads | C++ median | Rust median | Rust faster by |
+|---|---:|---:|---:|
+| `-p 1` | `98.30 s` | `62.51 s` | `36%` |
+| `-p 4` | `24.36 s` | `17.73 s` | `27%` |
+| `-p 8` | `14.09 s` | `11.35 s` | `19%` |
 
-Those numbers are specific to that workload and should be read as translation-evaluation data, not as a blanket speed claim. For this repository they are a fair benchmark: both sides used normal optimized builds, neither side used `-march=native`, and checking Rust with and without LTO showed only a small effect.
+Output is byte-identical (SHA-256 `226edc173dfa4d048b3992c7fe2344064d65765e01279d4175e1c2f43fc62f9b`).
+
+Earlier `600,000` read-pair runs are kept in [BENCHMARKS.md](BENCHMARKS.md) for context. On a `-p 4` `600k` measurement, peak RSS was C++ `187,568 kB` vs Rust `59,812 kB` (`68%` less for Rust).
+
+Those numbers are specific to these workloads and should be read as translation-evaluation data, not as a blanket speed claim. For this repository they are a fair benchmark: both sides used normal optimized builds, neither side used `-march=native`, and checking Rust with and without LTO showed only a small effect.
 
 The classification output follows the standard Kraken 2 format:
 

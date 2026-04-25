@@ -360,10 +360,6 @@ fn free_string(s: &mut BlastString) {
     s.len = 0;
 }
 
-fn ntoh_64(val: u64) -> u64 {
-    u64::from_be(val)
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct Amb32 {
     offset: u32,
@@ -409,7 +405,7 @@ fn read_int(file: &mut File) -> io::Result<u32> {
 fn read_long(file: &mut File) -> io::Result<u32> {
     let mut buf = [0u8; 8];
     file.read_exact(&mut buf)?;
-    Ok(ntoh_64(u64::from_ne_bytes(buf)) as u32)
+    Ok(u64::from_be_bytes(buf) as u32)
 }
 
 fn read_array(file: &mut File, element_size: u32, length: u32) -> io::Result<Vec<u8>> {
@@ -1245,8 +1241,8 @@ fn read_ambiguous_data(
     if *format == 1 {
         let count = amb_data_len / 2;
         for i in 0..count as usize {
-            let segment = u64::from_ne_bytes(input[pos..pos + 8].try_into().unwrap());
-            output[i] = Amb::Amb64(u64_to_amb64(ntoh_64(segment)));
+            let segment = u64::from_be_bytes(input[pos..pos + 8].try_into().unwrap());
+            output[i] = Amb::Amb64(u64_to_amb64(segment));
             pos += 8;
         }
         count

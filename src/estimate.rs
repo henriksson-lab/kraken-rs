@@ -1,5 +1,8 @@
 use std::collections::HashSet;
 use std::io;
+use std::sync::Mutex;
+
+use rayon::prelude::*;
 
 use crate::hash::murmurhash3;
 use crate::minimizer::MinimizerScanner;
@@ -220,23 +223,48 @@ pub fn process_sequence(seq: &str, opts: &EstimateOptions, sets: &mut [HashSet<u
 }
 
 pub fn process_sequences(opts: &EstimateOptions) -> io::Result<usize> {
-    let mut vector_of_sets: Vec<Vec<HashSet<u64>>> = (0..opts.threads)
-        .map(|_| (0..opts.n).map(|_| HashSet::new()).collect())
-        .collect();
-    let mut reader = BatchSequenceReader::new(None)?;
+    let threads = opts.threads.max(1);
+    let n = opts.n;
+    let block_size = opts.block_size;
+    let reader = Mutex::new(BatchSequenceReader::new(None)?);
 
-    let mut thread_idx = 0usize;
-    while reader.load_block(opts.block_size) {
-        while let Some(seq) = reader.next_sequence() {
-            process_sequence(&seq.seq, opts, &mut vector_of_sets[thread_idx]);
-            thread_idx = (thread_idx + 1) % opts.threads.max(1);
-        }
-    }
+    let pool = rayon::ThreadPoolBuilder::new()
+        .num_threads(threads)
+        .build()
+        .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
 
-    let mut sets = vector_of_sets.swap_remove(0);
-    for worker_sets in vector_of_sets {
-        for j in 0..opts.n {
-            sets[j].extend(worker_sets[j].iter().copied());
+    let vector_of_sets: Vec<Vec<HashSet<u64>>> = pool.install(|| {
+        (0..threads)
+            .into_par_iter()
+            .map(|_| {
+                let mut sets: Vec<HashSet<u64>> = (0..n).map(|_| HashSet::new()).collect();
+                loop {
+                    let seq_str: Option<String> = {
+                        let mut r = reader.lock().unwrap();
+                        let mut got = r.next_sequence().map(|s| s.seq.clone());
+                        while got.is_none() {
+                            if !r.load_block(block_size) {
+                                break;
+                            }
+                            got = r.next_sequence().map(|s| s.seq.clone());
+                        }
+                        got
+                    };
+                    match seq_str {
+                        Some(s) => process_sequence(&s, opts, &mut sets),
+                        None => break,
+                    }
+                }
+                sets
+            })
+            .collect()
+    });
+
+    let mut iter = vector_of_sets.into_iter();
+    let mut sets = iter.next().unwrap_or_else(|| (0..n).map(|_| HashSet::new()).collect());
+    for worker_sets in iter {
+        for (j, s) in worker_sets.into_iter().enumerate() {
+            sets[j].extend(s);
         }
     }
 
@@ -245,7 +273,7 @@ pub fn process_sequences(opts: &EstimateOptions) -> io::Result<usize> {
         sum_set_sizes += s.len();
     }
     sum_set_sizes += 1;
-    Ok((sum_set_sizes * RANGE_SECTIONS) / opts.n)
+    Ok((sum_set_sizes as f64 * RANGE_SECTIONS as f64 / opts.n as f64) as usize)
 }
 
 pub fn estimate_capacity_main(args: &[String]) -> io::Result<usize> {
