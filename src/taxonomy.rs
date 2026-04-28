@@ -629,29 +629,9 @@ pub fn destroy_taxonomy(_t: Taxonomy) {}
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::Write;
 
     fn test_data_dir() -> String {
         format!("{}/kraken2/data", env!("CARGO_MANIFEST_DIR"))
-    }
-
-    /// Helper: create a seqid2taxid map from test FASTA headers.
-    fn create_test_seqid2taxid(path: &str) -> io::Result<()> {
-        // The test FASTA files have headers like ">NC_045512.2 ..." but no explicit taxid.
-        // We need to create a map. Look at names.dmp for available taxids.
-        // For the test, we just mark a few known taxids from names.dmp.
-        let mut file = File::create(path)?;
-        // These are taxids present in the test data names.dmp/nodes.dmp:
-        // 2697049 = SARS-CoV-2, 694009 = SARS, 1335626 = MERS, etc.
-        writeln!(file, "seq1\t2697049")?;
-        writeln!(file, "seq2\t694009")?;
-        writeln!(file, "seq3\t1335626")?;
-        writeln!(file, "seq4\t11320")?; // Influenza A
-        writeln!(file, "seq5\t11520")?; // Influenza B
-        writeln!(file, "seq6\t11676")?; // HIV-1
-        writeln!(file, "seq7\t11709")?; // HIV-2
-        writeln!(file, "seq8\t10710")?; // Lambda phage
-        Ok(())
     }
 
     #[test]

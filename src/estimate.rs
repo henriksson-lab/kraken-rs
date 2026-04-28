@@ -261,7 +261,9 @@ pub fn process_sequences(opts: &EstimateOptions) -> io::Result<usize> {
     });
 
     let mut iter = vector_of_sets.into_iter();
-    let mut sets = iter.next().unwrap_or_else(|| (0..n).map(|_| HashSet::new()).collect());
+    let mut sets = iter
+        .next()
+        .unwrap_or_else(|| (0..n).map(|_| HashSet::new()).collect());
     for worker_sets in iter {
         for (j, s) in worker_sets.into_iter().enumerate() {
             sets[j].extend(s);

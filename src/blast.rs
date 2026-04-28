@@ -242,6 +242,7 @@ fn string_length(s: &BlastString) -> u32 {
     s.len
 }
 
+#[allow(dead_code)]
 fn string_capacity(s: &BlastString) -> u32 {
     s.cap
 }
@@ -254,6 +255,7 @@ fn string_data(s: &BlastString) -> &[u8] {
     &s.string[..s.len as usize]
 }
 
+#[allow(dead_code)]
 fn string_data_mut(s: &mut BlastString) -> &mut [u8] {
     let len = s.len as usize;
     &mut s.string[..len]
@@ -303,6 +305,7 @@ fn string_append_str(s: &mut BlastString, string: &str) {
     }
 }
 
+#[allow(dead_code)]
 fn string_copy(
     s1: &mut BlastString,
     s2: &BlastString,
@@ -328,6 +331,7 @@ fn string_copy(
     len
 }
 
+#[allow(dead_code)]
 fn string_append(s1: &mut BlastString, s2: &BlastString, s2_start: u32, len: u32) -> u32 {
     string_copy(s1, s2, s1.len, s2_start, len)
 }
@@ -339,6 +343,7 @@ fn string_reserve(s: &mut BlastString, size: u32) {
     }
 }
 
+#[allow(dead_code)]
 fn string_read_from_file<R: Read>(
     string: &mut BlastString,
     reader: &mut R,
@@ -1200,6 +1205,7 @@ fn has_ambiguous_data(block_end: u32, amb_start: u32) -> bool {
     block_end != amb_start
 }
 
+#[allow(dead_code)]
 fn get_nucleotide_length(data: &[u8], data_length: usize) -> u32 {
     let remainder = data[data_length] as u32;
     ((data_length - 1) as u32) * 4 + remainder
@@ -1450,6 +1456,7 @@ fn parse_blast_index(idx_path: &str) -> io::Result<BlastIndex> {
 }
 
 /// Decode a 2-bit packed nucleotide sequence.
+#[allow(dead_code)]
 fn decode_ncbi2na(packed: &[u8], length: usize) -> Vec<u8> {
     let mut seq = Vec::with_capacity(length);
     for &byte in packed {
@@ -1624,7 +1631,12 @@ pub fn blast_to_fasta_main(args: &[String]) -> io::Result<()> {
     let mut i = 1usize;
     while i < args.len() {
         match args[i].as_str() {
-            "-h" => return Err(io::Error::new(io::ErrorKind::InvalidInput, blast_to_fasta_help(&prog))),
+            "-h" => {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    blast_to_fasta_help(&prog),
+                ))
+            }
             "-o" => {
                 i += 1;
                 out_filename = Some(args.get(i).cloned().ok_or_else(|| {
@@ -1638,7 +1650,9 @@ pub fn blast_to_fasta_main(args: &[String]) -> io::Result<()> {
                 seq_width = args
                     .get(i)
                     .and_then(|s| s.parse::<usize>().ok())
-                    .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "-w has to be at least 1"))?;
+                    .ok_or_else(|| {
+                        io::Error::new(io::ErrorKind::InvalidInput, "-w has to be at least 1")
+                    })?;
                 if seq_width < 1 {
                     return Err(io::Error::new(
                         io::ErrorKind::InvalidInput,
@@ -1668,7 +1682,10 @@ pub fn blast_to_fasta_main(args: &[String]) -> io::Result<()> {
     let volume = volume.ok_or_else(|| {
         io::Error::new(
             io::ErrorKind::InvalidInput,
-            format!("Missing basename of BLAST volume\n{}", blast_to_fasta_usage(&prog)),
+            format!(
+                "Missing basename of BLAST volume\n{}",
+                blast_to_fasta_usage(&prog)
+            ),
         )
     })?;
     let out_filename = out_filename.unwrap_or_else(|| format!("{volume}.fna"));

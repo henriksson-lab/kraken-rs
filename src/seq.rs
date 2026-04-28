@@ -142,6 +142,7 @@ impl BatchSequenceReader {
     /// Read one sequence (FASTA or FASTQ) from the stream.
     /// Mimics kseq.h behavior: header is text after @/> up to whitespace,
     /// comment is the rest of the header line.
+    #[allow(dead_code)]
     fn read_one(&mut self) -> Option<Sequence> {
         let mut s = Sequence::default();
         if self.read_one_into(&mut s) {

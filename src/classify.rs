@@ -82,6 +82,7 @@ impl Options {
 }
 
 #[derive(Default)]
+#[allow(dead_code)]
 struct OutputStreamData {
     initialized: bool,
     printing_sequences: bool,
@@ -150,6 +151,7 @@ fn load_index(opts: &mut Options) -> io::Result<IndexData> {
     Ok((idx_opts, taxonomy, hash))
 }
 
+#[allow(dead_code)]
 fn tokenize_string(argv: &mut Vec<String>, s: &str) {
     argv.clear();
     argv.extend(
@@ -196,10 +198,12 @@ fn report_stats(start: Duration, end: Duration, stats: &ClassificationStats) -> 
     )
 }
 
+#[allow(dead_code)]
 fn open_output_stream(filename: &str) -> io::Result<BufWriter<File>> {
     File::create(filename).map(BufWriter::new)
 }
 
+#[allow(dead_code)]
 fn initialize_outputs(
     opts: &Options,
     outputs: &mut OutputStreamData,
@@ -412,6 +416,7 @@ fn usage(_exit_code: i32) -> String {
 }
 
 #[cfg(unix)]
+#[allow(dead_code)]
 fn remove_blocking(fd: RawFd) -> io::Result<()> {
     let flags = unsafe { libc::fcntl(fd, libc::F_GETFL, 0) };
     if flags < 0 {
@@ -424,6 +429,7 @@ fn remove_blocking(fd: RawFd) -> io::Result<()> {
 }
 
 #[cfg(unix)]
+#[allow(dead_code)]
 fn mkfifo_if_needed(path: &str) -> io::Result<()> {
     let c_path = CString::new(path).unwrap();
     let rc = unsafe { libc::mkfifo(c_path.as_ptr(), libc::S_IRWXU) };
@@ -435,6 +441,7 @@ fn mkfifo_if_needed(path: &str) -> io::Result<()> {
 }
 
 #[cfg(unix)]
+#[allow(dead_code)]
 fn open_fd(path: &CString, flags: i32) -> io::Result<RawFd> {
     let fd = unsafe { libc::open(path.as_ptr(), flags) };
     if fd < 0 {
@@ -445,6 +452,7 @@ fn open_fd(path: &CString, flags: i32) -> io::Result<RawFd> {
 }
 
 #[cfg(unix)]
+#[allow(dead_code)]
 fn dup2_checked(src: RawFd, dst: RawFd) -> io::Result<()> {
     if unsafe { libc::dup2(src, dst) } < 0 {
         Err(io::Error::last_os_error())
@@ -454,6 +462,7 @@ fn dup2_checked(src: RawFd, dst: RawFd) -> io::Result<()> {
 }
 
 #[cfg(unix)]
+#[allow(dead_code)]
 fn daemonize() -> io::Result<i32> {
     let mut pid = unsafe { libc::fork() };
     if pid < 0 {
@@ -517,6 +526,7 @@ fn daemonize() -> io::Result<i32> {
 }
 
 #[cfg(unix)]
+#[allow(dead_code)]
 fn open_fifos(opts: &Options, pid: libc::pid_t) -> io::Result<()> {
     let stdin_filename = format!("/tmp/classify_{}_stdin", pid);
     let stdout_filename = format!("/tmp/classify_{}_stdout", pid);
@@ -722,7 +732,7 @@ pub fn classify_sequence(
     output_buf.clear();
     let frame_ct = if opts.use_translated_search { 6 } else { 1 };
     let mut minimizer_hit_groups: i64 = 0;
-    let mut call: TaxId = 0;
+    let mut quick_call: Option<TaxId> = None;
 
     'mate_loop: for mate_num in 0..2 {
         if mate_num == 1 && !opts.paired_end_processing {
@@ -783,7 +793,7 @@ pub fn classify_sequence(
 
                     if taxon != 0 {
                         if opts.quick_mode && minimizer_hit_groups >= opts.minimum_hit_groups {
-                            call = taxon;
+                            quick_call = Some(taxon);
                             break 'mate_loop;
                         }
                         *hit_counts.entry(taxon).or_insert(0) += 1;
@@ -812,7 +822,9 @@ pub fn classify_sequence(
         total_kmers = total_kmers.saturating_sub(frame_markers);
     }
 
-    call = resolve_tree(hit_counts, taxonomy, total_kmers, opts.confidence_threshold);
+    let mut call = quick_call.unwrap_or_else(|| {
+        resolve_tree(hit_counts, taxonomy, total_kmers, opts.confidence_threshold)
+    });
 
     // Void call if too few hit groups
     if call != 0 && minimizer_hit_groups < opts.minimum_hit_groups {
@@ -1074,8 +1086,7 @@ fn process_files(
                                         &mut local_buf,
                                     );
                                     local_stats.total_sequences += 1;
-                                    local_stats.total_bases +=
-                                        (s1.seq.len() + s2.seq.len()) as u64;
+                                    local_stats.total_bases += (s1.seq.len() + s2.seq.len()) as u64;
                                     if call != 0 {
                                         local_stats.total_classified += 1;
                                     } else {
@@ -1206,8 +1217,7 @@ fn process_files(
                                         &mut local_buf,
                                     );
                                     local_stats.total_sequences += 1;
-                                    local_stats.total_bases +=
-                                        (s1.seq.len() + s2.seq.len()) as u64;
+                                    local_stats.total_bases += (s1.seq.len() + s2.seq.len()) as u64;
                                     if call != 0 {
                                         local_stats.total_classified += 1;
                                     } else {
@@ -2191,10 +2201,10 @@ mod tests {
         let mut taxonomy =
             Taxonomy::from_file(ref_dir.join("taxo.k2d").to_str().unwrap(), false).unwrap();
         taxonomy.generate_external_to_internal_id_map();
-        let hash = CompactHashTable::from_file(ref_dir.join("hash.k2d").to_str().unwrap(), false)
-            .unwrap();
-        let idx_opts = IndexOptions::read_from_file(ref_dir.join("opts.k2d").to_str().unwrap())
-            .unwrap();
+        let hash =
+            CompactHashTable::from_file(ref_dir.join("hash.k2d").to_str().unwrap(), false).unwrap();
+        let idx_opts =
+            IndexOptions::read_from_file(ref_dir.join("opts.k2d").to_str().unwrap()).unwrap();
 
         let dir = tempfile::tempdir().unwrap();
         let r1 = dir.path().join("reads_1.fq");
@@ -2259,7 +2269,13 @@ mod tests {
         assert_eq!(stats_single.total_sequences, stats_multi.total_sequences);
         assert_eq!(stats_single.total_bases, stats_multi.total_bases);
         assert_eq!(stats_single.total_classified, stats_multi.total_classified);
-        assert_eq!(stats_single.total_unclassified, stats_multi.total_unclassified);
-        assert_eq!(fs::read_to_string(out1).unwrap(), fs::read_to_string(out4).unwrap());
+        assert_eq!(
+            stats_single.total_unclassified,
+            stats_multi.total_unclassified
+        );
+        assert_eq!(
+            fs::read_to_string(out1).unwrap(),
+            fs::read_to_string(out4).unwrap()
+        );
     }
 }

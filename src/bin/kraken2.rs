@@ -1,8 +1,8 @@
 use clap::{Parser, Subcommand};
 use std::process;
 
-use kraken2_rs::build_db;
 use kraken2_rs::blast;
+use kraken2_rs::build_db;
 use kraken2_rs::classify;
 use kraken2_rs::dump_table;
 use kraken2_rs::dust;
@@ -829,8 +829,7 @@ mod tests {
 
     #[test]
     fn test_blast_to_fasta_args_routes_to_translated_flags() {
-        let args =
-            blast_to_fasta_args("db/core_nt.00".to_string(), "out.fna".to_string(), true);
+        let args = blast_to_fasta_args("db/core_nt.00".to_string(), "out.fna".to_string(), true);
         assert_eq!(args[0], "blast_to_fasta");
         assert!(args.contains(&"-o".to_string()));
         assert!(args.contains(&"-t".to_string()));

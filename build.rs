@@ -5,8 +5,8 @@ fn main() {
 }
 
 fn generate_hll_bias_tables() {
-    let header =
-        std::fs::read_to_string("data/hyperloglogplus-bias.h").expect("read hyperloglogplus-bias.h");
+    let header = std::fs::read_to_string("data/hyperloglogplus-bias.h")
+        .expect("read hyperloglogplus-bias.h");
     let threshold =
         extract_braced_after(&header, "threshold[] =").expect("extract threshold table");
     let raw =
