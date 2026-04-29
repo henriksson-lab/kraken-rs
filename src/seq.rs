@@ -56,7 +56,7 @@ impl BatchSequenceReader {
     ///
     /// # Example
     /// ```
-    /// use kraken2_rs::seq::BatchSequenceReader;
+    /// use kraken2_pure_rs::seq::BatchSequenceReader;
     /// let data = b">seq1\nACGT\n>seq2\nTTTT\n";
     /// let mut reader = BatchSequenceReader::from_reader(std::io::Cursor::new(data));
     /// reader.load_block(1000);

@@ -1896,10 +1896,10 @@ pub struct ClassificationResult {
 ///
 /// # Example
 /// ```no_run
-/// use kraken2_rs::classify::{ClassifyOptions, classify_sequences_in_memory};
-/// use kraken2_rs::compact_hash::CompactHashTable;
-/// use kraken2_rs::taxonomy::Taxonomy;
-/// use kraken2_rs::types::{IndexOptions, Sequence};
+/// use kraken2_pure_rs::classify::{ClassifyOptions, classify_sequences_in_memory};
+/// use kraken2_pure_rs::compact_hash::CompactHashTable;
+/// use kraken2_pure_rs::taxonomy::Taxonomy;
+/// use kraken2_pure_rs::types::{IndexOptions, Sequence};
 ///
 /// let idx_opts = IndexOptions::read_from_file("db/opts.k2d").unwrap();
 /// let mut taxonomy = Taxonomy::from_file("db/taxo.k2d", false).unwrap();
@@ -1977,8 +1977,8 @@ pub fn classify_sequences_in_memory(
 ///
 /// # Example
 /// ```no_run
-/// use kraken2_rs::classify::{ClassifyDb, ClassifyOptions};
-/// use kraken2_rs::types::Sequence;
+/// use kraken2_pure_rs::classify::{ClassifyDb, ClassifyOptions};
+/// use kraken2_pure_rs::types::Sequence;
 ///
 /// let db = ClassifyDb::from_directory("path/to/db").unwrap();
 /// let opts = ClassifyOptions::default();

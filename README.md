@@ -116,8 +116,8 @@ kraken2 inspect -d /path/to/db --skip-counts
 ### Classify sequences (load once, classify many)
 
 ```rust
-use kraken2_rs::classify::{ClassifyDb, ClassifyOptions};
-use kraken2_rs::types::Sequence;
+use kraken2_pure_rs::classify::{ClassifyDb, ClassifyOptions};
+use kraken2_pure_rs::types::Sequence;
 
 // Load database once
 let db = ClassifyDb::from_directory("path/to/db").unwrap();
@@ -147,7 +147,7 @@ let result = db.classify_one(&single_seq, &opts);
 ### Read sequences from any source
 
 ```rust
-use kraken2_rs::seq::BatchSequenceReader;
+use kraken2_pure_rs::seq::BatchSequenceReader;
 
 // From a file (auto-detects .gz and .bz2)
 let mut reader = BatchSequenceReader::new(Some("input.fa.gz")).unwrap();
@@ -165,7 +165,7 @@ while let Some(seq) = reader.next_sequence() {
 ### Build a taxonomy programmatically
 
 ```rust
-use kraken2_rs::taxonomy::NCBITaxonomy;
+use kraken2_pure_rs::taxonomy::NCBITaxonomy;
 
 let mut ncbi_tax = NCBITaxonomy::new("nodes.dmp", "names.dmp").unwrap();
 ncbi_tax.mark_node(2697049); // SARS-CoV-2
@@ -176,8 +176,8 @@ ncbi_tax.convert_to_kraken_taxonomy("taxo.k2d").unwrap();
 ### Work with minimizers
 
 ```rust
-use kraken2_rs::minimizer::MinimizerScanner;
-use kraken2_rs::types::*;
+use kraken2_pure_rs::minimizer::MinimizerScanner;
+use kraken2_pure_rs::types::*;
 
 let mut scanner = MinimizerScanner::new(
     35, 31,
