@@ -77,7 +77,7 @@ fn clz_p(x: u32, p: u8) -> u8 {
 #[allow(dead_code)]
 #[inline]
 fn extract_bits(value: u64, hi: u8, lo: u8, shift_left: bool) -> u64 {
-    let bitmask = (((1u64 << (hi - lo)) - 1) << lo) as u64;
+    let bitmask = ((1u64 << (hi - lo)) - 1) << lo;
     let result = value & bitmask;
     if shift_left {
         result << (64 - hi)
@@ -693,7 +693,7 @@ mod tests {
         let est = hll.cardinality();
         // Should be roughly 1000 (within ~5% for p=12)
         assert!(
-            est >= 900 && est <= 1100,
+            (900..=1100).contains(&est),
             "HLL estimate {} not close to 1000",
             est
         );
@@ -714,7 +714,7 @@ mod tests {
         hll1.merge(&hll2);
         let est = hll1.cardinality();
         assert!(
-            est >= 900 && est <= 1100,
+            (900..=1100).contains(&est),
             "Merged HLL estimate {} not close to 1000",
             est
         );

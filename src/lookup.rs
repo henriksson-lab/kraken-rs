@@ -171,7 +171,7 @@ fn lookup_accession_numbers_main_inner(args: &[String], writer: &mut dyn Write) 
                 }
             }
 
-            if accessions_searched % 10_000_000 == 0 && tty {
+            if accessions_searched.is_multiple_of(10_000_000) && tty {
                 write!(
                     stderr,
                     "\rFound {}/{} targets, searched through {} accession IDs...",

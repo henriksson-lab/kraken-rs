@@ -38,7 +38,7 @@ enum Commands {
         confidence: f64,
 
         /// Minimum hit groups for classification
-        #[arg(long, short = 'g', default_value = "0")]
+        #[arg(long, short = 'g', default_value = "2")]
         minimum_hit_groups: i64,
 
         /// Paired-end processing (two input files)
@@ -306,6 +306,7 @@ fn push_option<T: ToString>(args: &mut Vec<String>, flag: &str, value: T) {
     args.push(value.to_string());
 }
 
+#[allow(clippy::too_many_arguments)]
 fn classify_args(
     db: String,
     threads: usize,
@@ -429,6 +430,7 @@ fn build_db_args(
     args
 }
 
+#[allow(clippy::too_many_arguments)]
 fn estimate_args(
     kmer_len: usize,
     minimizer_len: usize,
@@ -780,6 +782,17 @@ mod tests {
         assert!(args.contains(&"-m".to_string()));
         assert!(args.contains(&"-K".to_string()));
         assert!(args.contains(&"reads.fq".to_string()));
+    }
+
+    #[test]
+    fn test_classify_cli_default_minimum_hit_groups_matches_wrapper() {
+        let cli = Cli::try_parse_from(["kraken2", "classify", "--db", "db", "reads.fq"]).unwrap();
+        match cli.command {
+            Commands::Classify {
+                minimum_hit_groups, ..
+            } => assert_eq!(minimum_hit_groups, 2),
+            _ => panic!("expected classify command"),
+        }
     }
 
     #[test]

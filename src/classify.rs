@@ -732,8 +732,6 @@ pub fn classify_sequence(
     output_buf.clear();
     let frame_ct = if opts.use_translated_search { 6 } else { 1 };
     let mut minimizer_hit_groups: i64 = 0;
-    let mut quick_call: Option<TaxId> = None;
-
     'mate_loop: for mate_num in 0..2 {
         if mate_num == 1 && !opts.paired_end_processing {
             break;
@@ -793,7 +791,6 @@ pub fn classify_sequence(
 
                     if taxon != 0 {
                         if opts.quick_mode && minimizer_hit_groups >= opts.minimum_hit_groups {
-                            quick_call = Some(taxon);
                             break 'mate_loop;
                         }
                         *hit_counts.entry(taxon).or_insert(0) += 1;
@@ -822,9 +819,7 @@ pub fn classify_sequence(
         total_kmers = total_kmers.saturating_sub(frame_markers);
     }
 
-    let mut call = quick_call.unwrap_or_else(|| {
-        resolve_tree(hit_counts, taxonomy, total_kmers, opts.confidence_threshold)
-    });
+    let mut call = resolve_tree(hit_counts, taxonomy, total_kmers, opts.confidence_threshold);
 
     // Void call if too few hit groups
     if call != 0 && minimizer_hit_groups < opts.minimum_hit_groups {
@@ -886,10 +881,13 @@ fn process_output(
     call: TaxId,
     kraken_str: &str,
     seq: &Sequence,
+    seq2: Option<&Sequence>,
     taxonomy: &Taxonomy,
     kraken_out: &mut Option<BufWriter<File>>,
-    classified_out: &mut Option<BufWriter<File>>,
-    unclassified_out: &mut Option<BufWriter<File>>,
+    classified_out1: &mut Option<BufWriter<File>>,
+    classified_out2: &mut Option<BufWriter<File>>,
+    unclassified_out1: &mut Option<BufWriter<File>>,
+    unclassified_out2: &mut Option<BufWriter<File>>,
     stats: &mut ClassificationStats,
 ) -> io::Result<()> {
     if call != 0 {
@@ -903,41 +901,94 @@ fn process_output(
     }
 
     if call != 0 {
-        if let Some(ref mut out) = classified_out {
+        if let Some(ref mut out) = classified_out1 {
             let ext = taxonomy.node(call).external_id;
-            if seq.format == SequenceFormat::Fastq {
-                writeln!(out, "@{} kraken:taxid|{}", seq.header, ext)?;
-                writeln!(out, "{}", seq.seq)?;
-                writeln!(out, "+")?;
-                writeln!(out, "{}", seq.quals)?;
-            } else {
-                writeln!(out, ">{} kraken:taxid|{}", seq.header, ext)?;
-                writeln!(out, "{}", seq.seq)?;
-            }
+            write_sequence_with_taxid(out, seq, Some(ext))?;
         }
-    } else if let Some(ref mut out) = unclassified_out {
-        if seq.format == SequenceFormat::Fastq {
-            writeln!(out, "@{}", seq.header)?;
-            writeln!(out, "{}", seq.seq)?;
-            writeln!(out, "+")?;
-            writeln!(out, "{}", seq.quals)?;
-        } else {
-            writeln!(out, ">{}", seq.header)?;
-            writeln!(out, "{}", seq.seq)?;
+        if let (Some(ref mut out), Some(seq2)) = (classified_out2, seq2) {
+            let ext = taxonomy.node(call).external_id;
+            write_sequence_with_taxid(out, seq2, Some(ext))?;
+        }
+    } else {
+        if let Some(ref mut out) = unclassified_out1 {
+            write_sequence_with_taxid(out, seq, None)?;
+        }
+        if let (Some(ref mut out), Some(seq2)) = (unclassified_out2, seq2) {
+            write_sequence_with_taxid(out, seq2, None)?;
         }
     }
     Ok(())
 }
 
+fn write_sequence_with_taxid(
+    out: &mut BufWriter<File>,
+    seq: &Sequence,
+    taxid: Option<u64>,
+) -> io::Result<()> {
+    let mut seq = seq.clone();
+    if let Some(taxid) = taxid {
+        use std::fmt::Write as FmtWrite;
+        let _ = write!(seq.header, " kraken:taxid|{}", taxid);
+    }
+    write!(out, "{}", seq.to_fasta_string())
+}
+
+type SequenceOutputStreams = (Option<BufWriter<File>>, Option<BufWriter<File>>);
+
+fn open_sequence_output_streams(
+    filename: Option<&str>,
+    paired: bool,
+) -> io::Result<SequenceOutputStreams> {
+    let Some(filename) = filename else {
+        return Ok((None, None));
+    };
+
+    if !paired {
+        return Ok((Some(open_output_stream(filename)?), None));
+    }
+
+    let fields = crate::utilities::split_string(filename, "#", 3);
+    if fields.len() < 2 {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("Paired filename format missing # character: {}", filename),
+        ));
+    }
+    if fields.len() > 2 {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("Paired filename format has >1 # character: {}", filename),
+        ));
+    }
+
+    Ok((
+        Some(open_output_stream(
+            &(fields[0].clone() + "_1" + &fields[1]),
+        )?),
+        Some(open_output_stream(
+            &(fields[0].clone() + "_2" + &fields[1]),
+        )?),
+    ))
+}
+
 struct OutputHandles<'a> {
     kraken_output: &'a mut Option<BufWriter<File>>,
-    classified_output: &'a mut Option<BufWriter<File>>,
-    unclassified_output: &'a mut Option<BufWriter<File>>,
+    classified_output1: &'a mut Option<BufWriter<File>>,
+    classified_output2: &'a mut Option<BufWriter<File>>,
+    unclassified_output1: &'a mut Option<BufWriter<File>>,
+    unclassified_output2: &'a mut Option<BufWriter<File>>,
 }
 
 enum ClassificationInput {
     Single(Sequence),
     Pair(Sequence, Sequence),
+}
+
+struct ClassificationOutput {
+    call: TaxId,
+    kraken_line: String,
+    seq1: Sequence,
+    seq2: Option<Sequence>,
 }
 
 fn process_files(
@@ -970,7 +1021,7 @@ fn process_files(
 
         struct OutputBlock {
             block_id: u64,
-            results: Vec<(TaxId, String, Sequence)>,
+            results: Vec<ClassificationOutput>,
             local_counters: TaxonCounters,
             local_stats: ClassificationStats,
         }
@@ -1001,12 +1052,16 @@ fn process_files(
             &mut Option<BufWriter<File>>,
             &mut Option<BufWriter<File>>,
             &mut Option<BufWriter<File>>,
+            &mut Option<BufWriter<File>>,
+            &mut Option<BufWriter<File>>,
             &mut ClassificationStats,
             &mut TaxonCounters,
         )> = parking_lot::Mutex::new((
             outputs.kraken_output,
-            outputs.classified_output,
-            outputs.unclassified_output,
+            outputs.classified_output1,
+            outputs.classified_output2,
+            outputs.unclassified_output1,
+            outputs.unclassified_output2,
             stats,
             taxon_counters,
         ));
@@ -1092,7 +1147,12 @@ fn process_files(
                                     } else {
                                         local_stats.total_unclassified += 1;
                                     }
-                                    results.push((call, local_buf.clone(), s1));
+                                    results.push(ClassificationOutput {
+                                        call,
+                                        kraken_line: local_buf.clone(),
+                                        seq1: s1,
+                                        seq2: Some(s2),
+                                    });
                                 }
                             }
 
@@ -1117,7 +1177,7 @@ fn process_files(
                                     drop(next_out);
 
                                     let mut state = output_state.lock();
-                                    let (ko, co, uo, st, tc) = &mut *state;
+                                    let (ko, co1, co2, uo1, uo2, st, tc) = &mut *state;
                                     st.total_sequences += blk.local_stats.total_sequences;
                                     st.total_bases += blk.local_stats.total_bases;
                                     st.total_classified += blk.local_stats.total_classified;
@@ -1125,15 +1185,18 @@ fn process_files(
                                     for (taxid, counter) in blk.local_counters {
                                         tc.entry(taxid).or_default().merge(&counter);
                                     }
-                                    for (call, kraken_str, seq) in &blk.results {
+                                    for result in &blk.results {
                                         let _ = process_output(
-                                            *call,
-                                            kraken_str,
-                                            seq,
+                                            result.call,
+                                            &result.kraken_line,
+                                            &result.seq1,
+                                            result.seq2.as_ref(),
                                             taxonomy,
                                             ko,
-                                            co,
-                                            uo,
+                                            co1,
+                                            co2,
+                                            uo1,
+                                            uo2,
                                             &mut ClassificationStats::default(),
                                         );
                                     }
@@ -1223,7 +1286,12 @@ fn process_files(
                                     } else {
                                         local_stats.total_unclassified += 1;
                                     }
-                                    results.push((call, local_buf.clone(), s1));
+                                    results.push(ClassificationOutput {
+                                        call,
+                                        kraken_line: local_buf.clone(),
+                                        seq1: s1,
+                                        seq2: Some(s2),
+                                    });
                                 }
                             }
 
@@ -1248,7 +1316,7 @@ fn process_files(
                                     drop(next_out);
 
                                     let mut state = output_state.lock();
-                                    let (ko, co, uo, st, tc) = &mut *state;
+                                    let (ko, co1, co2, uo1, uo2, st, tc) = &mut *state;
                                     st.total_sequences += blk.local_stats.total_sequences;
                                     st.total_bases += blk.local_stats.total_bases;
                                     st.total_classified += blk.local_stats.total_classified;
@@ -1256,15 +1324,18 @@ fn process_files(
                                     for (taxid, counter) in blk.local_counters {
                                         tc.entry(taxid).or_default().merge(&counter);
                                     }
-                                    for (call, kraken_str, seq) in &blk.results {
+                                    for result in &blk.results {
                                         let _ = process_output(
-                                            *call,
-                                            kraken_str,
-                                            seq,
+                                            result.call,
+                                            &result.kraken_line,
+                                            &result.seq1,
+                                            result.seq2.as_ref(),
                                             taxonomy,
                                             ko,
-                                            co,
-                                            uo,
+                                            co1,
+                                            co2,
+                                            uo1,
+                                            uo2,
                                             &mut ClassificationStats::default(),
                                         );
                                     }
@@ -1343,7 +1414,12 @@ fn process_files(
                                     } else {
                                         local_stats.total_unclassified += 1;
                                     }
-                                    results.push((call, local_buf.clone(), seq));
+                                    results.push(ClassificationOutput {
+                                        call,
+                                        kraken_line: local_buf.clone(),
+                                        seq1: seq,
+                                        seq2: None,
+                                    });
                                 }
                             }
 
@@ -1368,7 +1444,7 @@ fn process_files(
                                     drop(next_out);
 
                                     let mut state = output_state.lock();
-                                    let (ko, co, uo, st, tc) = &mut *state;
+                                    let (ko, co1, co2, uo1, uo2, st, tc) = &mut *state;
                                     st.total_sequences += blk.local_stats.total_sequences;
                                     st.total_bases += blk.local_stats.total_bases;
                                     st.total_classified += blk.local_stats.total_classified;
@@ -1376,15 +1452,18 @@ fn process_files(
                                     for (taxid, counter) in blk.local_counters {
                                         tc.entry(taxid).or_default().merge(&counter);
                                     }
-                                    for (call, kraken_str, seq) in &blk.results {
+                                    for result in &blk.results {
                                         let _ = process_output(
-                                            *call,
-                                            kraken_str,
-                                            seq,
+                                            result.call,
+                                            &result.kraken_line,
+                                            &result.seq1,
+                                            result.seq2.as_ref(),
                                             taxonomy,
                                             ko,
-                                            co,
-                                            uo,
+                                            co1,
+                                            co2,
+                                            uo1,
+                                            uo2,
                                             &mut ClassificationStats::default(),
                                         );
                                     }
@@ -1433,10 +1512,13 @@ fn process_files(
                             call,
                             &output_buf,
                             &s1,
+                            Some(&s2),
                             taxonomy,
                             outputs.kraken_output,
-                            outputs.classified_output,
-                            outputs.unclassified_output,
+                            outputs.classified_output1,
+                            outputs.classified_output2,
+                            outputs.unclassified_output1,
+                            outputs.unclassified_output2,
                             stats,
                         )?;
                     }
@@ -1477,10 +1559,13 @@ fn process_files(
                             call,
                             &output_buf,
                             &s1,
+                            Some(&s2),
                             taxonomy,
                             outputs.kraken_output,
-                            outputs.classified_output,
-                            outputs.unclassified_output,
+                            outputs.classified_output1,
+                            outputs.classified_output2,
+                            outputs.unclassified_output1,
+                            outputs.unclassified_output2,
                             stats,
                         )?;
                     }
@@ -1519,10 +1604,13 @@ fn process_files(
                     call,
                     &output_buf,
                     &seq,
+                    None,
                     taxonomy,
                     outputs.kraken_output,
-                    outputs.classified_output,
-                    outputs.unclassified_output,
+                    outputs.classified_output1,
+                    outputs.classified_output2,
+                    outputs.unclassified_output1,
+                    outputs.unclassified_output2,
                     stats,
                 )?;
             }
@@ -1553,17 +1641,19 @@ fn classify_with_index_data(
     // Open output streams
     let mut kraken_out: Option<BufWriter<File>> = kraken_output
         .map(|f| BufWriter::new(File::create(f).expect("Failed to open kraken output")));
-    let mut classified_out: Option<BufWriter<File>> = classified_output
-        .map(|f| BufWriter::new(File::create(f).expect("Failed to open classified output")));
-    let mut unclassified_out: Option<BufWriter<File>> = unclassified_output
-        .map(|f| BufWriter::new(File::create(f).expect("Failed to open unclassified output")));
+    let (mut classified_out1, mut classified_out2) =
+        open_sequence_output_streams(classified_output, classify_opts.paired_end_processing)?;
+    let (mut unclassified_out1, mut unclassified_out2) =
+        open_sequence_output_streams(unclassified_output, classify_opts.paired_end_processing)?;
 
     let mut stats = ClassificationStats::default();
     let mut taxon_counters = TaxonCounters::new();
     let mut outputs = OutputHandles {
         kraken_output: &mut kraken_out,
-        classified_output: &mut classified_out,
-        unclassified_output: &mut unclassified_out,
+        classified_output1: &mut classified_out1,
+        classified_output2: &mut classified_out2,
+        unclassified_output1: &mut unclassified_out1,
+        unclassified_output2: &mut unclassified_out2,
     };
 
     if input_files.is_empty() {
@@ -2138,11 +2228,13 @@ mod tests {
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
 
-        let mut opts = Options::default();
-        opts.paired_end_processing = true;
-        opts.classified_output_filename = dir.join("classified#.fq").display().to_string();
-        opts.unclassified_output_filename = dir.join("unclassified#.fq").display().to_string();
-        opts.kraken_output_filename = dir.join("kraken.out").display().to_string();
+        let opts = Options {
+            paired_end_processing: true,
+            classified_output_filename: dir.join("classified#.fq").display().to_string(),
+            unclassified_output_filename: dir.join("unclassified#.fq").display().to_string(),
+            kraken_output_filename: dir.join("kraken.out").display().to_string(),
+            ..Default::default()
+        };
 
         let mut outputs = OutputStreamData::default();
         initialize_outputs(&opts, &mut outputs, SequenceFormat::Fastq).unwrap();
@@ -2277,5 +2369,84 @@ mod tests {
             fs::read_to_string(out1).unwrap(),
             fs::read_to_string(out4).unwrap()
         );
+    }
+
+    #[test]
+    fn test_quick_mode_still_resolves_tree_like_cpp() {
+        let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let ref_dir = root.join("tests/reference");
+        let input = root.join("kraken2/data/COVID_19.fa");
+        if !ref_dir.exists() || !input.exists() {
+            return;
+        }
+
+        let out = tempfile::NamedTempFile::new().unwrap();
+        let opts = ClassifyOptions {
+            quick_mode: true,
+            minimum_hit_groups: 0,
+            ..Default::default()
+        };
+
+        let stats = run_classify(
+            &[input.to_str().unwrap().to_string()],
+            ref_dir.join("hash.k2d").to_str().unwrap(),
+            ref_dir.join("taxo.k2d").to_str().unwrap(),
+            ref_dir.join("opts.k2d").to_str().unwrap(),
+            &opts,
+            Some(out.path().to_str().unwrap()),
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+
+        assert_eq!(stats.total_sequences, 1);
+        assert_eq!(stats.total_classified, 0);
+        let text = fs::read_to_string(out.path()).unwrap();
+        assert!(text.starts_with("U\tkraken:taxid|2697049|NC_045512.2\t0\t"));
+        assert!(text.ends_with("\t0:Q\n"));
+    }
+
+    #[test]
+    fn test_paired_classified_output_writes_both_mates() {
+        let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let ref_dir = root.join("tests/reference");
+        let input = root.join("kraken2/data/COVID_19.fa");
+        if !ref_dir.exists() || !input.exists() {
+            return;
+        }
+
+        let dir = tempfile::tempdir().unwrap();
+        let output_pattern = dir.path().join("classified#.fa");
+        let opts = ClassifyOptions {
+            paired_end_processing: true,
+            ..Default::default()
+        };
+
+        let stats = run_classify(
+            &[
+                input.to_str().unwrap().to_string(),
+                input.to_str().unwrap().to_string(),
+            ],
+            ref_dir.join("hash.k2d").to_str().unwrap(),
+            ref_dir.join("taxo.k2d").to_str().unwrap(),
+            ref_dir.join("opts.k2d").to_str().unwrap(),
+            &opts,
+            None,
+            Some(output_pattern.to_str().unwrap()),
+            None,
+            None,
+        )
+        .unwrap();
+
+        assert_eq!(stats.total_sequences, 1);
+        assert_eq!(stats.total_classified, 1);
+        assert!(!output_pattern.exists());
+        let mate1 = fs::read_to_string(dir.path().join("classified_1.fa")).unwrap();
+        let mate2 = fs::read_to_string(dir.path().join("classified_2.fa")).unwrap();
+        assert!(mate1.starts_with(">kraken:taxid|2697049|NC_045512.2 kraken:taxid|"));
+        assert!(mate2.starts_with(">kraken:taxid|2697049|NC_045512.2 kraken:taxid|"));
+        assert!(mate1.contains("ATTAAAGGTTTATACCTTCCCAGGTAACAAACCAACCAACTTTCGATCTCTTGTAGATCT"));
+        assert!(mate2.contains("ATTAAAGGTTTATACCTTCCCAGGTAACAAACCAACCAACTTTCGATCTCTTGTAGATCT"));
     }
 }

@@ -231,7 +231,7 @@ pub fn process_sequences(opts: &EstimateOptions) -> io::Result<usize> {
     let pool = rayon::ThreadPoolBuilder::new()
         .num_threads(threads)
         .build()
-        .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+        .map_err(io::Error::other)?;
 
     let vector_of_sets: Vec<Vec<HashSet<u64>>> = pool.install(|| {
         (0..threads)

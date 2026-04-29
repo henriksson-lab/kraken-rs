@@ -127,9 +127,9 @@ pub fn dump_table_main(args: &[String]) -> io::Result<()> {
             idx_opts.spaced_seed_mask,
             (idx_opts.l
                 * if idx_opts.dna_db {
-                    crate::types::BITS_PER_CHAR_DNA as usize
+                    crate::types::BITS_PER_CHAR_DNA
                 } else {
-                    crate::types::BITS_PER_CHAR_PRO as usize
+                    crate::types::BITS_PER_CHAR_PRO
                 }) as i32
         )
     );
@@ -150,9 +150,9 @@ pub fn dump_table_main(args: &[String]) -> io::Result<()> {
         let mut total_seqs = 0u64;
         let mut taxid_counters = TaxonCounters::new();
         for (taxid, count) in taxid_counts {
-            total_seqs += u64::from(count);
+            total_seqs += count;
             let counter = taxid_counters.entry(taxid).or_default();
-            counter.n_reads = u64::from(count);
+            counter.n_reads = count;
         }
 
         if opts.use_mpa_style {
