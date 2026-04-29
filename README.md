@@ -4,9 +4,8 @@ A Rust port of [Kraken 2](https://github.com/DerrickWood/kraken2) — a taxonomi
 
 This crate provides both a command-line tool and a library for classifying biological sequences against a Kraken 2 database.
 
-* 2026-04-25: Furether optimization; maybe 20% faster than Kraken2 if lucky (not broken down by step - should be analyzed further). Further auditing done
-* 2026-04-23: Possibly ready for real world data. If you decide to use it, ensure to compare the output on our own data with the original Kraken 2 software, as bugs may still remain
-* Possibly about 10% faster than the original (on par)
+* 2026-04-29: Latest audit, passes on real data test.  If you decide to use it, ensure to compare the output on our own data with the original Kraken 2 software, as bugs may still remain. On par, possibly 20% faster, than original KRAKEN2 (take with a pinch of salt)
+
 
 ## This is an LLM-mediated faithful (hopefully) translation, not the original code! 
 
@@ -228,21 +227,10 @@ C/U  header  taxid  length  hitlist
 - `length` = sequence length in bp (or `len1|len2` for paired reads)
 - `hitlist` = space-separated `taxid:count` pairs
 
-## Database Compatibility
 
-This crate reads and writes database files (`hash.k2d`, `taxo.k2d`, `opts.k2d`) that are binary-compatible with the original Kraken 2 C++ implementation. Databases built with either version can be used interchangeably.
+## Citing
 
-## Ecosystem Integration
-
-This crate is designed to work well with the Rust bioinformatics ecosystem:
-
-- **[noodles](https://crates.io/crates/noodles)** — Compatible with noodles-based sequence processing pipelines.
-- **[rayon](https://crates.io/crates/rayon)** — Data parallelism (replaces OpenMP from the C++ version).
-- **[memmap2](https://crates.io/crates/memmap2)** — Memory-mapped database access for low-RAM systems.
-- **[flate2](https://crates.io/crates/flate2)** / **[bzip2](https://crates.io/crates/bzip2)** — In-process decompression (no external gzip/bzip2 needed).
-- **[ureq](https://crates.io/crates/ureq)** — HTTP downloads for NCBI data (replaces wget/rsync).
-
-The library API accepts `Read` trait objects, so it integrates naturally with any Rust I/O source (files, network streams, in-memory buffers).
+Wood, D.E., Lu, J. & Langmead, B. Improved metagenomic analysis with Kraken 2. Genome Biol 20, 257 (2019). https://doi.org/10.1186/s13059-019-1891-0
 
 ## License
 
