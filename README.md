@@ -1,4 +1,4 @@
-# kraken2
+# kraken2-pure-rs
 
 A Rust port of [Kraken 2](https://github.com/DerrickWood/kraken2) — a taxonomic sequence classification system for DNA/RNA sequences.
 
