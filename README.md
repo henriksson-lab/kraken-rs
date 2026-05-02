@@ -4,6 +4,7 @@ A Rust port of [Kraken 2](https://github.com/DerrickWood/kraken2) — a taxonomi
 
 This crate provides both a command-line tool and a library for classifying biological sequences against a Kraken 2 database.
 
+* 2026-05-02: Made it easier to access internals as a library
 * 2026-04-29: Latest audit, passes on real data test.  If you decide to use it, ensure to compare the output on our own data with the original Kraken 2 software, as bugs may still remain. On par, possibly 20% faster, than original KRAKEN2 (take with a pinch of salt)
 
 
