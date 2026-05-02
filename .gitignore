@@ -1,0 +1,8 @@
+/target/
+/.bench/
+/.codex
+/Cargo.toml.orig
+/*.crate
+
+# Temporary outputs produced by local benchmarking and helper tools
+/unmapped.txt
