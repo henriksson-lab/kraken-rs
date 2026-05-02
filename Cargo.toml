@@ -1,6 +1,6 @@
 [package]
 name = "kraken2-pure-rs"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 description = "Taxonomic sequence classification system — Rust port of Kraken 2"
 license = "MIT"
@@ -11,8 +11,8 @@ keywords = ["bioinformatics", "kraken", "taxonomy", "metagenomics", "classificat
 categories = ["science", "command-line-utilities"]
 include = [
     "/Cargo.toml",
+    "/LICENSE",
     "/README.md",
-    "/BENCHMARKS.md",
     "/build.rs",
     "/data/hyperloglogplus-bias.h",
     "/src/**",
