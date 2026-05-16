@@ -23,6 +23,8 @@ struct MinQueue {
 }
 
 impl MinQueue {
+    /// Construct an empty deque. The backing array is pre-filled with
+    /// zeroed `MinimizerData` so reads of un-written slots are safe.
     #[inline]
     fn new() -> Self {
         Self {
@@ -35,29 +37,37 @@ impl MinQueue {
         }
     }
 
+    /// Reset to empty without touching the backing array.
     #[inline]
     fn clear(&mut self) {
         self.head = 0;
         self.len = 0;
     }
 
+    /// True iff no elements are currently in the deque.
     #[inline]
     fn is_empty(&self) -> bool {
         self.len == 0
     }
 
+    /// Borrow the oldest element (the current window minimum candidate).
+    /// Caller must ensure the deque is non-empty.
     #[inline]
     fn front(&self) -> &MinimizerData {
         debug_assert!(self.len > 0);
         unsafe { self.data.get_unchecked(self.head & Q_MASK) }
     }
 
+    /// Borrow the most recently pushed element. Caller must ensure the
+    /// deque is non-empty.
     #[inline]
     fn back(&self) -> &MinimizerData {
         debug_assert!(self.len > 0);
         unsafe { self.data.get_unchecked((self.head + self.len - 1) & Q_MASK) }
     }
 
+    /// Push onto the tail. Caller must ensure `len < Q_CAP`; this holds
+    /// because the deque can never grow beyond `k - l + 1` entries.
     #[inline]
     fn push_back(&mut self, x: MinimizerData) {
         debug_assert!(self.len < Q_CAP);
@@ -68,12 +78,16 @@ impl MinQueue {
         self.len += 1;
     }
 
+    /// Drop the tail element (used to discard candidates dominated by a
+    /// new arrival in the sliding-window minimum).
     #[inline]
     fn pop_back(&mut self) {
         debug_assert!(self.len > 0);
         self.len -= 1;
     }
 
+    /// Drop the head element (used when the current minimum falls out of
+    /// the window).
     #[inline]
     fn pop_front(&mut self) {
         debug_assert!(self.len > 0);
@@ -84,6 +98,16 @@ impl MinQueue {
 
 /// Minimizer scanner — extracts minimizers from DNA or protein sequences.
 /// Exact port of C++ `MinimizerScanner` from `mmscanner.h/cc`.
+///
+/// For each `k`-mer the scanner reports the minimum (under XOR-with-toggle
+/// ordering) `l`-mer occurring within it. A sliding-window minimum is
+/// maintained in a monotone deque (`MinQueue`) so amortised cost per
+/// k-mer is O(1). DNA `l`-mers are canonicalised by taking
+/// `min(lmer, reverse_complement(lmer))`; protein sequences are encoded
+/// using a reduced 15-letter alphabet (4 bits per character) packed in
+/// **AGCT** order (not ACGT). Ambiguous bases (anything outside the
+/// alphabet) reset the scanner state and mark subsequent minimizers as
+/// ambiguous until the next clean l-mer.
 pub struct MinimizerScanner {
     seq: Vec<u8>,
     k: isize,
@@ -106,6 +130,14 @@ pub struct MinimizerScanner {
 }
 
 impl MinimizerScanner {
+    /// Create a scanner for length-`k` k-mers over length-`l` minimizers.
+    ///
+    /// `spaced_seed_mask` may be 0 (use the full l-mer) or a non-zero
+    /// mask that ANDs the canonical l-mer to spaced positions. `toggle_mask`
+    /// XORs the l-mer before/after the minimum search so the ordering can be
+    /// shifted away from lexicographic (zero recovers lexicographic order).
+    /// `revcom_version` selects between two reverse-complement bit packings
+    /// (0 = legacy, 1 = current); old databases need 0.
     pub fn new(
         k: isize,
         l: isize,
@@ -182,11 +214,18 @@ impl MinimizerScanner {
         }
     }
 
+    /// Register both the upper- and lower-case form of `ch` in the lookup
+    /// table with the same encoded value.
     fn set_lookup(table: &mut [u8; 256], ch: u8, val: u8) {
         table[ch as usize] = val;
         table[ch.to_ascii_lowercase() as usize] = val;
     }
 
+    /// Reset the scanner onto a new sequence buffer covering the half-open
+    /// range `[start, finish)`. Clamps `finish` to the sequence length and
+    /// short-circuits to an exhausted state if the interval is shorter than
+    /// a single l-mer. Clears the sliding-window queue and ambiguous-base
+    /// tracking.
     pub fn load_sequence(&mut self, seq: &str, start: usize, finish: usize) {
         let bytes = seq.as_bytes();
         self.seq.clear();

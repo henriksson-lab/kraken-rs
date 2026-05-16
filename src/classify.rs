@@ -53,6 +53,9 @@ struct Options {
 }
 
 impl Options {
+    /// Reset every field to its default value before re-parsing a command
+    /// line. Mirrors `Options::reset()` in the C++ source — used by daemon
+    /// mode when handling a new request on the same `Options` instance.
     fn reset(&mut self) {
         self.quick_mode = false;
         self.confidence_threshold = 0.0;
@@ -142,6 +145,10 @@ pub struct ClassificationStats {
     pub total_unclassified: u64,
 }
 
+/// Load the three on-disk database files (`opts.k2d`, `taxo.k2d`, `hash.k2d`)
+/// into the in-memory `IndexData` tuple consumed by the classifier. Also
+/// derives `opts.use_translated_search` from the index header and builds the
+/// taxonomy's external-to-internal id map. Port of C++ `load_index()`.
 fn load_index(opts: &mut Options) -> io::Result<IndexData> {
     let idx_opts = IndexOptions::read_from_file(&opts.options_filename)?;
     opts.use_translated_search = !idx_opts.dna_db;
@@ -151,6 +158,8 @@ fn load_index(opts: &mut Options) -> io::Result<IndexData> {
     Ok((idx_opts, taxonomy, hash))
 }
 
+/// Split a whitespace-separated command line into argv tokens. Port of C++
+/// `TokenizeString()`, used historically by the daemon's request loop.
 #[allow(dead_code)]
 fn tokenize_string(argv: &mut Vec<String>, s: &str) {
     argv.clear();
@@ -161,6 +170,10 @@ fn tokenize_string(argv: &mut Vec<String>, s: &str) {
     );
 }
 
+/// Format the end-of-run summary written to stderr — total sequences, base
+/// pairs, throughput, and classified/unclassified counts. Port of C++
+/// `ReportStats()`; the formatting matches the original `fprintf` output so
+/// downstream parsers see identical text.
 fn report_stats(start: Duration, end: Duration, stats: &ClassificationStats) -> String {
     let seconds = end.saturating_sub(start).as_secs_f64();
     let total_unclassified = stats.total_sequences.saturating_sub(stats.total_classified);
@@ -198,11 +211,20 @@ fn report_stats(start: Duration, end: Duration, stats: &ClassificationStats) -> 
     )
 }
 
+/// Create a buffered file for output, returning the open `BufWriter`. The C++
+/// `OpenOutputStream()` aborted on failure with `errx`; here we propagate the
+/// IO error through `Result` instead.
 #[allow(dead_code)]
 fn open_output_stream(filename: &str) -> io::Result<BufWriter<File>> {
     File::create(filename).map(BufWriter::new)
 }
 
+/// Lazily open the classified-output, unclassified-output, and Kraken-output
+/// file handles described by `opts`. Paired-end formats containing a `#`
+/// character are expanded into `_1` and `_2` files (a missing or duplicated
+/// `#` is an error). Port of C++ `InitializeOutputs()`; the OpenMP
+/// `#pragma omp critical(output_init)` guard is unnecessary here because each
+/// caller owns the `OutputStreamData` exclusively.
 #[allow(dead_code)]
 fn initialize_outputs(
     opts: &Options,
@@ -287,6 +309,9 @@ fn initialize_outputs(
     Ok(())
 }
 
+/// Parse the `classify` binary's argv into an `Options` struct. Accepts the
+/// same short flags as the original C++ `getopt` loop in `ParseCommandLine()`
+/// and enforces the same mandatory-argument and value-range checks.
 fn parse_command_line(args: &[String], opts: &mut Options) -> io::Result<()> {
     opts.reset();
     let mut i = 1usize;
@@ -386,6 +411,10 @@ fn parse_command_line(args: &[String], opts: &mut Options) -> io::Result<()> {
     Ok(())
 }
 
+/// Return the multi-line help text describing every flag of the `classify`
+/// subcommand. Mirrors `usage()` from the C++ source. The `_exit_code`
+/// parameter is retained for signature compatibility but is unused here —
+/// callers decide how to exit.
 fn usage(_exit_code: i32) -> String {
     [
         "Usage: classify [options] <fasta/fastq file(s)>",
@@ -415,6 +444,9 @@ fn usage(_exit_code: i32) -> String {
     .join("\n")
 }
 
+/// Clear the `O_NONBLOCK` flag on `fd` so subsequent reads/writes block as
+/// usual. Port of C++ `RemoveBlocking()` used while wiring up the daemon's
+/// FIFOs.
 #[cfg(unix)]
 #[allow(dead_code)]
 fn remove_blocking(fd: RawFd) -> io::Result<()> {
@@ -428,6 +460,8 @@ fn remove_blocking(fd: RawFd) -> io::Result<()> {
     Ok(())
 }
 
+/// Create a named pipe at `path` with mode `0700`, treating a pre-existing
+/// FIFO as success. Helper for the daemon-mode setup.
 #[cfg(unix)]
 #[allow(dead_code)]
 fn mkfifo_if_needed(path: &str) -> io::Result<()> {
@@ -440,6 +474,8 @@ fn mkfifo_if_needed(path: &str) -> io::Result<()> {
     }
 }
 
+/// Open `path` with the given `flags` and return the raw file descriptor,
+/// converting libc's negative return into an `io::Error`.
 #[cfg(unix)]
 #[allow(dead_code)]
 fn open_fd(path: &CString, flags: i32) -> io::Result<RawFd> {
@@ -451,6 +487,7 @@ fn open_fd(path: &CString, flags: i32) -> io::Result<RawFd> {
     }
 }
 
+/// Duplicate `src` onto `dst` via `dup2`, surfacing any libc error.
 #[cfg(unix)]
 #[allow(dead_code)]
 fn dup2_checked(src: RawFd, dst: RawFd) -> io::Result<()> {
@@ -461,6 +498,10 @@ fn dup2_checked(src: RawFd, dst: RawFd) -> io::Result<()> {
     }
 }
 
+/// Detach the current process so it runs as a background daemon and wire its
+/// stdio to the `/tmp/classify_stdin` / `/tmp/classify_stdout` FIFOs. Port of
+/// the C++ `daemonize()` helper used by `ClassifyDaemon()`; performs the
+/// classic double-fork plus `setsid` and replaces fds 0/1/2 via `dup2`.
 #[cfg(unix)]
 #[allow(dead_code)]
 fn daemonize() -> io::Result<i32> {
@@ -525,6 +566,10 @@ fn daemonize() -> io::Result<i32> {
     Ok(0)
 }
 
+/// Open the per-child input/output FIFOs the daemon uses to talk to the
+/// classifier worker process. Port of C++ `OpenFifos()`; the
+/// keep-an-extra-fd-open dance prevents the daemon from receiving EOF when
+/// the external client closes its end of the pipe.
 #[cfg(unix)]
 #[allow(dead_code)]
 fn open_fifos(opts: &Options, pid: libc::pid_t) -> io::Result<()> {
@@ -652,6 +697,9 @@ pub fn append_hitlist_string(taxa: &[TaxId], taxonomy: &Taxonomy, out: &mut Stri
     append_hitlist_entry(out, last_code, code_count, taxonomy, false);
 }
 
+/// Append a single run-length entry (`taxid:count`, `A:count`, `|:|`, or
+/// `-:-`) to the hit-list buffer. Handles the special marker taxa for
+/// ambiguous spans, mate-pair boundaries, and reading-frame boundaries.
 fn append_hitlist_entry(
     result: &mut String,
     code: TaxId,
@@ -876,7 +924,10 @@ pub fn classify_sequence(
     call
 }
 
-/// Helper to write classification output for a single sequence.
+/// Route one sequence's classification result to the right output streams
+/// (Kraken line, classified/unclassified FASTA per mate) and update the
+/// running `ClassificationStats`. Equivalent to the per-record output block
+/// inside the C++ `ProcessFiles()` priority-queue drain.
 fn process_output(
     call: TaxId,
     kraken_str: &str,
@@ -920,6 +971,9 @@ fn process_output(
     Ok(())
 }
 
+/// Write `seq` as FASTA, optionally annotating its header with a
+/// `kraken:taxid|<id>` field. Used when emitting classified/unclassified
+/// sequence streams.
 fn write_sequence_with_taxid(
     out: &mut BufWriter<File>,
     seq: &Sequence,
@@ -935,6 +989,10 @@ fn write_sequence_with_taxid(
 
 type SequenceOutputStreams = (Option<BufWriter<File>>, Option<BufWriter<File>>);
 
+/// Open one or two output streams from a filename template. For paired-end
+/// runs the template must contain a single `#` which is expanded to `_1` and
+/// `_2`; single-end runs use the template as-is. Returns `(None, None)` if
+/// no filename was supplied.
 fn open_sequence_output_streams(
     filename: Option<&str>,
     paired: bool,
@@ -991,6 +1049,14 @@ struct ClassificationOutput {
     seq2: Option<Sequence>,
 }
 
+/// Drive classification over one input source (paired or unpaired) and write
+/// results to the streams in `outputs`. Port of C++ `ProcessFiles()`.
+///
+/// When `num_threads > 1` we spawn a worker pool with `crossbeam::scope` and
+/// use a `parking_lot::Mutex`-guarded binary-heap as a sequenced output queue
+/// — this preserves input order across threads, the same property the C++
+/// version achieves via `omp_lock_t` plus an `std::priority_queue`. The
+/// single-thread path runs the simpler synchronous loop directly.
 fn process_files(
     filename1: Option<&str>,
     filename2: Option<&str>,
@@ -1742,6 +1808,9 @@ fn classify_with_index_data(
     Ok(stats)
 }
 
+/// Translate parsed command-line `Options` into the library
+/// `ClassifyOptions`, run `classify_with_index_data`, then write the timing
+/// summary to stderr. Port of C++ `classify()`.
 fn classify(opts: &Options, index_data: &mut IndexData) -> io::Result<()> {
     let started = Instant::now();
     let start = Duration::from_secs(0);
@@ -1798,6 +1867,9 @@ fn classify(opts: &Options, index_data: &mut IndexData) -> io::Result<()> {
     Ok(())
 }
 
+/// Entry point used by the `classify` CLI subcommand. Parses argv, optionally
+/// branches into daemon mode (Unix only), and otherwise loads the database
+/// and runs classification. Mirrors `main()` in `kraken2/src/classify.cc`.
 pub fn classify_main(args: &[String]) -> io::Result<()> {
     let mut opts = Options::default();
     parse_command_line(args, &mut opts)?;
@@ -1841,6 +1913,10 @@ pub fn classify_main(args: &[String]) -> io::Result<()> {
     classify(&opts, &mut index_data)
 }
 
+/// Library-friendly classification entry point: load the three database
+/// files from the supplied paths, then run the full pipeline against
+/// `input_files`. Returns the aggregate `ClassificationStats` so callers
+/// can render their own progress reports.
 pub fn run_classify(
     input_files: &[String],
     hash_filename: &str,
@@ -2179,11 +2255,14 @@ mod tests {
     use super::*;
     use std::fs;
 
+    /// Resolve the directory containing pre-generated test database files,
+    /// honoring `KRAKEN2_TEST_DATA_DIR` if set.
     fn test_data_dir() -> String {
         std::env::var("KRAKEN2_TEST_DATA_DIR")
             .unwrap_or_else(|_| "/tmp/kraken2_test_data".to_string())
     }
 
+    /// `tokenize_string` splits on single spaces and discards empties.
     #[test]
     fn test_tokenize_string() {
         let mut argv = Vec::new();
@@ -2194,6 +2273,7 @@ mod tests {
         );
     }
 
+    /// `parse_command_line` populates flags and positional inputs as expected.
     #[test]
     fn test_parse_command_line() {
         let args = vec![
@@ -2221,6 +2301,8 @@ mod tests {
         assert_eq!(opts.filenames, vec!["reads_1.fq", "reads_2.fq"]);
     }
 
+    /// `initialize_outputs` expands `#` templates for paired-end runs and
+    /// opens every requested stream.
     #[test]
     fn test_initialize_outputs() {
         let dir =
@@ -2249,6 +2331,8 @@ mod tests {
         let _ = fs::remove_dir_all(&dir);
     }
 
+    /// `report_stats` formats sequence and base-pair counts with the same
+    /// precision/spacing as the C++ implementation.
     #[test]
     fn test_report_stats() {
         let stats = ClassificationStats {
@@ -2264,6 +2348,8 @@ mod tests {
         assert!(text.contains("3 sequences unclassified"));
     }
 
+    /// Smoke-test `load_index` against the on-disk reference database when
+    /// available.
     #[test]
     fn test_load_index() {
         let data_dir = std::path::PathBuf::from(test_data_dir());
@@ -2282,6 +2368,9 @@ mod tests {
         assert!(hash.capacity() > 0);
     }
 
+    /// Single-thread and multi-thread paired-end runs must produce byte-
+    /// identical Kraken output and identical aggregate statistics. Guards
+    /// against ordering regressions in the priority-queue output path.
     #[test]
     fn test_paired_multithread_matches_single_thread_stats_and_output() {
         let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -2371,6 +2460,9 @@ mod tests {
         );
     }
 
+    /// Verify quick-mode classification on the COVID test input produces the
+    /// same `U`/taxid/length/hitlist prefix and `0:Q` quick-mode suffix the
+    /// C++ implementation emits.
     #[test]
     fn test_quick_mode_still_resolves_tree_like_cpp() {
         let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -2407,6 +2499,9 @@ mod tests {
         assert!(text.ends_with("\t0:Q\n"));
     }
 
+    /// In paired-end mode with a `#`-templated classified-output filename,
+    /// both `_1` and `_2` FASTA files must be written and tagged with the
+    /// `kraken:taxid|<id>` header annotation.
     #[test]
     fn test_paired_classified_output_writes_both_mates() {
         let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));

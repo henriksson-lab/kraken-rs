@@ -6,7 +6,10 @@ use flate2::read::GzDecoder;
 
 const NCBI_FTP_BASE: &str = "https://ftp.ncbi.nlm.nih.gov";
 
-/// Download a file from a URL using ureq.
+/// Download a file from a URL using `ureq` and write it verbatim to
+/// `output_path`. Replaces the `wget`/`curl` calls in the original
+/// `download_*.sh` and `download_taxonomy.pl` scripts. Returns the number
+/// of bytes written.
 pub fn download_file(url: &str, output_path: &str) -> io::Result<u64> {
     eprintln!("Downloading {} ...", url);
     let response = ureq::get(url)
@@ -19,7 +22,10 @@ pub fn download_file(url: &str, output_path: &str) -> io::Result<u64> {
     Ok(bytes)
 }
 
-/// Download and decompress a gzipped file.
+/// Download a gzip-compressed file and write the decompressed bytes to
+/// `output_path`. Used for NCBI `accession2taxid.gz` maps; replaces the
+/// `wget | gunzip` pipeline used by the original shell scripts. Returns the
+/// number of decompressed bytes written.
 pub fn download_and_decompress_gz(url: &str, output_path: &str) -> io::Result<u64> {
     eprintln!("Downloading and decompressing {} ...", url);
     let response = ureq::get(url)
@@ -33,7 +39,10 @@ pub fn download_and_decompress_gz(url: &str, output_path: &str) -> io::Result<u6
     Ok(bytes)
 }
 
-/// Download and extract a tar.gz archive, keeping only specified files.
+/// Download and extract a `.tar.gz` archive into `output_dir`, keeping only
+/// the entries whose basename appears in `keep_files` (empty `keep_files`
+/// extracts everything). Replaces the `tar -xzf` invocation used by the
+/// original `download_taxonomy.pl` script when fetching `taxdump.tar.gz`.
 fn download_and_extract_tar_gz(
     url: &str,
     output_dir: &Path,
@@ -61,7 +70,13 @@ fn download_and_extract_tar_gz(
     Ok(())
 }
 
-/// Download NCBI taxonomy (nodes.dmp, names.dmp) into db_dir/taxonomy/.
+/// Download the NCBI taxonomy into `db_dir/taxonomy/`.
+///
+/// Native Rust replacement for the Perl `download_taxonomy.pl` workflow:
+/// fetches the appropriate `accession2taxid` map(s) (`prot.accession2taxid`
+/// when `protein`, otherwise the `nucl_gb`/`nucl_wgs` pair) unless
+/// `skip_maps` is set, then downloads and extracts `taxdump.tar.gz` keeping
+/// only `nodes.dmp`, `names.dmp`, and `merged.dmp`.
 pub fn download_taxonomy(db_dir: &str, skip_maps: bool, protein: bool) -> io::Result<()> {
     let taxonomy_dir = PathBuf::from(db_dir).join("taxonomy");
     fs::create_dir_all(&taxonomy_dir)?;
@@ -104,7 +119,11 @@ struct AssemblyEntry {
     ftp_path: String,
 }
 
-/// Parse assembly_summary.txt and return entries for complete genomes.
+/// Parse an NCBI RefSeq `assembly_summary.txt` and return one
+/// [`AssemblyEntry`] per Complete Genome / Chromosome assembly with a usable
+/// `ftp_path` (field 19). Comment lines and rows with `ftp_path == "na"` or
+/// fewer than 20 tab-separated fields are skipped. Replaces the
+/// `awk`/`grep` filtering used by the original `download_genomic_library.sh`.
 fn parse_assembly_summary(path: &Path) -> io::Result<Vec<AssemblyEntry>> {
     let file = BufReader::new(File::open(path)?);
     let mut entries = Vec::new();
@@ -138,8 +157,15 @@ fn parse_assembly_summary(path: &Path) -> io::Result<Vec<AssemblyEntry>> {
     Ok(entries)
 }
 
-/// Download genomes from parsed assembly entries and write to library.fna.
-/// Each sequence header is prefixed with kraken:taxid|TAXID|.
+/// Download genomes from parsed assembly entries and write to `library.fna`
+/// (or `library.faa` when `protein`).
+///
+/// For each entry, fetches `{ftp_path}/{basename}_genomic.fna.gz` (or the
+/// `_protein.faa.gz` variant), streams it through gzip, and rewrites every
+/// FASTA header to `>kraken:taxid|TAXID|<original-header>` so downstream
+/// build steps can recover the taxid via [`scan_fasta_for_taxids`]. Returns
+/// `(projects, sequences, bases)` counts. Replaces the bulk-download loop
+/// in `download_genomic_library.sh`.
 fn download_genomes(
     entries: &[AssemblyEntry],
     output_path: &Path,
@@ -196,8 +222,13 @@ fn download_genomes(
     Ok((projects, sequences, bases))
 }
 
-/// Scan a FASTA file and extract sequence ID to taxid mappings.
-/// Looks for kraken:taxid|TAXID| patterns in headers.
+/// Scan a FASTA file and extract `(seqid, taxid)` pairs from headers shaped
+/// `>kraken:taxid|TAXID|<rest>`.
+///
+/// The `seqid` returned is the entire first whitespace-delimited token of
+/// the header (including the `kraken:taxid|TAXID|` prefix), matching what
+/// the build step expects in `prelim_map.txt`. Lines without the
+/// `kraken:taxid|` prefix are ignored.
 pub fn scan_fasta_for_taxids(fasta_path: &Path) -> io::Result<Vec<(String, u64)>> {
     let file = BufReader::new(File::open(fasta_path)?);
     let mut mappings = Vec::new();
@@ -222,8 +253,19 @@ pub fn scan_fasta_for_taxids(fasta_path: &Path) -> io::Result<Vec<(String, u64)>
     Ok(mappings)
 }
 
-/// Download a genomic library from NCBI RefSeq.
-/// This is the main entry point matching the kraken2-build --download-library command.
+/// Download a genomic library from NCBI into `db_dir/library/<library_type>/`.
+///
+/// Replaces `kraken2-build --download-library` (the Perl/Bash
+/// `download_genomic_library.sh`):
+/// - `UniVec` / `UniVec_Core`: fetches the bare file from `pub/UniVec/`,
+///   rewrites every FASTA header with the synthetic taxid 28384
+///   ("other sequences"), and emits `prelim_map.txt`.
+/// - `archaea`, `bacteria`, `viral`, `fungi`, `plant`, `protozoa`, `human`,
+///   `plasmid`: downloads `assembly_summary.txt`, (for `human` filters to
+///   Genome Reference Consortium assemblies), then calls
+///   [`download_genomes`] over [`parse_assembly_summary`] results and writes
+///   `prelim_map.txt`. Other `library_type` values are rejected.
+/// Protein mode produces `library.faa`; nucleotide mode produces `library.fna`.
 pub fn download_library(db_dir: &str, library_type: &str, protein: bool) -> io::Result<()> {
     let library_dir = PathBuf::from(db_dir).join("library").join(library_type);
     fs::create_dir_all(&library_dir)?;
@@ -323,7 +365,11 @@ pub fn download_library(db_dir: &str, library_type: &str, protein: bool) -> io::
     Ok(())
 }
 
-/// Clean up intermediate files after database is built.
+/// Clean up intermediate files after a database has been built.
+///
+/// Removes `db_dir/library/`, `db_dir/taxonomy/`, and `db_dir/seqid2taxid.map`
+/// if present. Equivalent to the `kraken2-build --clean` step in the
+/// original Perl wrapper.
 pub fn clean_db(db_dir: &str) -> io::Result<()> {
     let library_dir = PathBuf::from(db_dir).join("library");
     let taxonomy_dir = PathBuf::from(db_dir).join("taxonomy");
@@ -348,6 +394,8 @@ pub fn clean_db(db_dir: &str) -> io::Result<()> {
 mod tests {
     use super::*;
 
+    /// Verify that two synthetic `>kraken:taxid|TAXID|...` headers are parsed
+    /// out of a FASTA file and their taxids extracted in order.
     #[test]
     fn test_scan_fasta_for_taxids() {
         let tmp = tempfile::NamedTempFile::new().unwrap();
@@ -362,6 +410,8 @@ mod tests {
         assert_eq!(mappings[1].1, 9606);
     }
 
+    /// Parse a synthetic `assembly_summary.txt` row and confirm taxid,
+    /// assembly level, and FTP path land in the right [`AssemblyEntry`] fields.
     #[test]
     fn test_parse_assembly_summary() {
         let tmp = tempfile::NamedTempFile::new().unwrap();

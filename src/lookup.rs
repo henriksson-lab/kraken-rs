@@ -6,7 +6,15 @@ use crate::mmap_file::MMapFile;
 use crate::types::TaxId;
 use crate::utilities::split_string;
 
-/// Look up accession numbers in accession-to-taxid map files.
+/// Look up accession numbers in NCBI accession-to-taxid map files.
+///
+/// `accession_file` is a TSV where column 2 of each line is an accession to
+/// resolve (typically the `prelim_map.txt` produced by library scanning).
+/// Each `map_files` entry follows the NCBI `accession2taxid` schema:
+/// `accession\taccession.version\ttaxid\tgi` per line (header row included);
+/// both the bare accession and the `accession.version` form are matched.
+/// Returns a map from accession (as originally listed in `accession_file`) to
+/// its resolved [`TaxId`], with `0` for unmapped entries.
 /// Port of C++ `lookup_accession_numbers.cc`.
 pub fn lookup_accession_numbers(
     accession_file: &str,
@@ -47,6 +55,9 @@ pub fn lookup_accession_numbers(
     Ok(accessions)
 }
 
+/// Return `true` if stderr is attached to a terminal. Used to gate the
+/// in-place progress updates (`\r ...`) that the C++ code emits only when
+/// `isatty(fileno(stderr))`.
 fn stderr_is_tty() -> bool {
     #[cfg(unix)]
     {
@@ -58,6 +69,9 @@ fn stderr_is_tty() -> bool {
     }
 }
 
+/// Open the destination for resolved `seqid\ttaxid` lines: a file if
+/// `output_filename` is `Some`, otherwise stdout (matching the C++ behaviour
+/// of writing to `std::cout`).
 fn open_lookup_writer(output_filename: Option<&str>) -> io::Result<Box<dyn Write>> {
     match output_filename {
         Some(path) => Ok(Box::new(File::create(path)?)),
@@ -65,10 +79,23 @@ fn open_lookup_writer(output_filename: Option<&str>) -> io::Result<Box<dyn Write
     }
 }
 
+/// Lossy UTF-8 extract of `line[start..end]` as an owned `String`, used to
+/// pull individual tab-separated fields out of the memory-mapped map file.
 fn accession_field(line: &[u8], start: usize, end: usize) -> String {
     String::from_utf8_lossy(&line[start..end]).into_owned()
 }
 
+/// Core driver behind the `lookup_accession_numbers` CLI; writable target is
+/// abstracted so tests can capture stdout.
+///
+/// `args[1]` is the `seqid\taccnum` lookup file (one accession may map to many
+/// seqids). `args[2..]` are NCBI `accession2taxid` maps, each with a header
+/// line followed by `accession\taccession.version\ttaxid\tgi` rows; files are
+/// memory-mapped via [`MMapFile`] and scanned linearly. For each hit, every
+/// associated `seqid\ttaxid` is written to `writer`; matched accessions are
+/// removed from the working set so iteration stops as soon as everything has
+/// been resolved. Any accessions still unmapped at the end are written to
+/// `unmapped.txt` in the current directory (matching the C++ behaviour).
 fn lookup_accession_numbers_main_inner(args: &[String], writer: &mut dyn Write) -> io::Result<()> {
     if args.len() < 3 {
         return Err(io::Error::new(
@@ -212,6 +239,10 @@ fn lookup_accession_numbers_main_inner(args: &[String], writer: &mut dyn Write) 
     Ok(())
 }
 
+/// CLI entry point for `lookup_accession_numbers`.
+///
+/// Forwards to [`lookup_accession_numbers_main_inner`] with stdout as the
+/// output sink, matching the original C++ binary.
 pub fn lookup_accession_numbers_main(args: &[String]) -> io::Result<()> {
     let mut writer = open_lookup_writer(None)?;
     lookup_accession_numbers_main_inner(args, &mut writer)
@@ -224,6 +255,8 @@ mod tests {
     use std::path::Path;
     use tempfile::tempdir;
 
+    /// Round-trip [`lookup_accession_numbers`] on tiny synthetic accession and
+    /// map files, asserting both bare and `accession.version` resolution.
     #[test]
     fn test_lookup_accession_numbers_helper() {
         let dir = tempdir().unwrap();
@@ -245,6 +278,8 @@ mod tests {
         assert_eq!(result.get("ACC2.1"), Some(&222));
     }
 
+    /// Verify the CLI driver writes resolved `seqid\ttaxid` lines to its
+    /// output sink and records remaining accessions in `unmapped.txt`.
     #[test]
     fn test_lookup_accession_numbers_main_writes_unmapped() {
         let dir = tempdir().unwrap();

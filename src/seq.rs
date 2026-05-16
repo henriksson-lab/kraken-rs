@@ -135,6 +135,8 @@ impl BatchSequenceReader {
         }
     }
 
+    /// Last-detected file format (FASTA or FASTQ). `AutoDetect` until the
+    /// first record has been read.
     pub fn file_format(&self) -> SequenceFormat {
         self.file_format
     }

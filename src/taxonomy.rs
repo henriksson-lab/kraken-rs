@@ -1,3 +1,26 @@
+//! Taxonomy tree storage and queries.
+//!
+//! Two layers, both ported from `kraken2/src/taxonomy.{h,cc}`:
+//!
+//! * [`NCBITaxonomy`] parses NCBI's `nodes.dmp` / `names.dmp` dumps, lets callers mark
+//!   the taxids actually referenced by the sequence library, and then converts the
+//!   marked subtree to Kraken 2's compact binary format.
+//! * [`Taxonomy`] loads that compact format (with optional memory-mapping) and supports
+//!   LCA / ancestor queries plus name/rank lookups.
+//!
+//! ### Key invariant: BFS-numbered nodes
+//! When [`NCBITaxonomy::convert_to_kraken_taxonomy`] writes the taxonomy, internal IDs
+//! are assigned in BFS order starting from the root, so **every node's `parent_id` is
+//! strictly less than its own ID** and a parent's direct children form a contiguous
+//! block starting at `first_child`. The LCA and ancestor-test routines exploit this:
+//! walking the larger-ID tracker to its parent is monotonically decreasing and converges.
+//!
+//! ### On-disk format (`taxo.k2d`)
+//! `"K2TAXDAT"` (8B, no NUL) · `node_count` (u64 LE) · `name_data_len` (u64 LE) ·
+//! `rank_data_len` (u64 LE) · `node_count × 56B` of `TaxonomyNode` · raw name super-string ·
+//! raw rank super-string. Name and rank super-strings are NUL-terminated concatenations;
+//! each node stores byte offsets into them. Ranks are deduplicated.
+
 use crate::mmap_file::MMapFile;
 use crate::types::TaxonomyNode;
 use ahash::AHashMap as HashMap;
@@ -267,10 +290,16 @@ impl Taxonomy {
         }
     }
 
+    /// Convenience constructor matching the C++ `Taxonomy(const char *, bool)` signature;
+    /// in Rust both string and char-pointer call sites collapse to `&str`, so this just
+    /// forwards to [`from_file`].
     pub fn from_cstr(filename: &str, memory_mapping: bool) -> io::Result<Self> {
         Self::from_file(filename, memory_mapping)
     }
 
+    /// Load taxonomy by streaming from the file into owned `Vec`s.
+    /// Verifies the `K2TAXDAT` magic and copies node array bytes into a properly
+    /// typed `Vec<TaxonomyNode>` (the on-disk layout matches `#[repr(C)]`).
     fn from_file_read(filename: &str) -> io::Result<Self> {
         let mut file = File::open(filename)?;
 
@@ -321,6 +350,9 @@ impl Taxonomy {
         })
     }
 
+    /// Load taxonomy via memory-mapping the file.
+    /// Holds the mmap alive in `_mmap` so the backing pages stay valid; node bytes
+    /// are still copied out into a `Vec<TaxonomyNode>` for safe access.
     fn from_file_mmap(filename: &str) -> io::Result<Self> {
         let mmap = MMapFile::open_read_only(filename)?;
         let data = mmap.as_slice();
@@ -427,6 +459,10 @@ impl Taxonomy {
 
     /// Check if node A is an ancestor of node B (using internal IDs).
     /// Exact port of C++ `Taxonomy::IsAAncestorOfB()`.
+    ///
+    /// Relies on the BFS-assigned invariant that a parent's internal ID is always
+    /// strictly less than its children's; we just walk B upward through `parent_id`
+    /// until we either reach A (B was a descendant) or pass it (B was not).
     pub fn is_a_ancestor_of_b(&self, a: u64, b: u64) -> bool {
         if a == 0 || b == 0 {
             return false;
@@ -440,6 +476,10 @@ impl Taxonomy {
 
     /// Compute the Lowest Common Ancestor of two nodes (using internal IDs).
     /// Exact port of C++ `Taxonomy::LowestCommonAncestor()`.
+    ///
+    /// Treats `0` as a "missing" sentinel: `LCA(x, 0) = LCA(0, x) = x`. Otherwise
+    /// walks the lower-ID tracker up to its parent until both meet; this works
+    /// because BFS numbering puts ancestors at smaller internal IDs.
     pub fn lowest_common_ancestor(&self, a: u64, b: u64) -> u64 {
         if a == 0 || b == 0 {
             return if a != 0 { a } else { b };
@@ -518,21 +558,31 @@ impl Taxonomy {
         &self.rank_data
     }
 
+    /// Explicitly drop the taxonomy. The C++ destructor freed manually-allocated buffers;
+    /// in Rust everything is RAII-owned by `Vec` and `Option<MMapFile>`, so this is just
+    /// an explicit "consume self" sink retained for API parity with the C++ destructor.
     pub fn destroy(self) {}
 }
 
 impl Default for Taxonomy {
+    /// Returns an empty taxonomy. Equivalent to [`Taxonomy::new`].
     fn default() -> Self {
         Self::new()
     }
 }
 
+/// Load a taxonomy file from disk and pre-build the external-to-internal lookup table.
+/// Convenience wrapper around `Taxonomy::from_file` + `generate_external_to_internal_id_map`
+/// matching the `init_taxonomy` entry point exposed by the original libtax C API.
 pub fn init_taxonomy(filename: &str) -> io::Result<Taxonomy> {
     let mut taxonomy = Taxonomy::from_file(filename, false)?;
     taxonomy.generate_external_to_internal_id_map();
     Ok(taxonomy)
 }
 
+/// LCA in external (NCBI) ID space.
+/// Translates both inputs to internal IDs, runs `lowest_common_ancestor`,
+/// and translates the result back to its NCBI taxid.
 pub fn get_lca(t: &Taxonomy, a: u64, b: u64) -> u64 {
     let internal_a = t.get_internal_id(a);
     let internal_b = t.get_internal_id(b);
@@ -540,37 +590,47 @@ pub fn get_lca(t: &Taxonomy, a: u64, b: u64) -> u64 {
     t.nodes()[internal_lca as usize].external_id
 }
 
+/// Return the external (NCBI) taxid of the parent of `taxid`. Returns the external
+/// id of node 0 (i.e. `0`) for the root, mirroring the C++ libtax helper.
 pub fn get_parent_id(t: &Taxonomy, taxid: u64) -> u64 {
     let internal_taxid = t.get_internal_id(taxid);
     let internal_parent = t.nodes()[internal_taxid as usize].parent_id;
     t.nodes()[internal_parent as usize].external_id
 }
 
+/// True iff `parent` is an ancestor of (or equal to) `child` in external-ID space.
 pub fn is_ancestor_of(t: &Taxonomy, parent: u64, child: u64) -> bool {
     let internal_parent = t.get_internal_id(parent);
     let internal_child = t.get_internal_id(child);
     t.is_a_ancestor_of_b(internal_parent, internal_child)
 }
 
+/// Map an external NCBI taxid to its internal BFS-assigned ID, or `0` if unknown.
 pub fn get_internal_taxid(t: &Taxonomy, external_id: u64) -> u64 {
     t.get_internal_id(external_id)
 }
 
+/// Return the rank string (e.g. `"species"`, `"genus"`) for a node by NCBI taxid.
 pub fn get_rank(t: &Taxonomy, external_id: u64) -> &str {
     let internal_id = get_internal_taxid(t, external_id);
     t.rank_at_offset(t.nodes()[internal_id as usize].rank_offset)
 }
 
+/// Return the scientific name string for a node by NCBI taxid.
 pub fn taxid_to_name(t: &Taxonomy, external_id: u64) -> &str {
     let internal_id = get_internal_taxid(t, external_id);
     t.name_at_offset(t.nodes()[internal_id as usize].name_offset)
 }
 
+/// Number of direct children of the given NCBI taxid in the Kraken taxonomy tree.
 pub fn get_child_count(t: &Taxonomy, external_id: u64) -> u64 {
     let internal_id = get_internal_taxid(t, external_id);
     t.nodes()[internal_id as usize].child_count
 }
 
+/// Fill `child_taxids[0..num_children]` with the external IDs of `parent_taxid`'s
+/// direct children. Children are stored in a contiguous block starting at
+/// `first_child`, so we just read consecutive nodes and project to `external_id`.
 pub fn get_child_taxids(
     t: &Taxonomy,
     parent_taxid: u64,
@@ -584,10 +644,14 @@ pub fn get_child_taxids(
     }
 }
 
+/// Free-function wrapper around `Taxonomy::write_to_disk` for the libtax-style API.
 pub fn write_to_disk_libtax(t: &Taxonomy, filename: &str) -> io::Result<()> {
     t.write_to_disk(filename)
 }
 
+/// Parse a whitespace-separated `seqid<TAB>taxid` map file into `id_map`.
+/// Skips entries whose taxid is 0 or fails to parse, matching the C++ behavior
+/// used during database builds.
 pub fn read_id_to_taxon_map(id_map: &mut BTreeMap<String, u64>, filename: &str) -> io::Result<()> {
     let map_file = BufReader::new(File::open(filename)?);
     for line in map_file.lines() {
@@ -607,6 +671,9 @@ pub fn read_id_to_taxon_map(id_map: &mut BTreeMap<String, u64>, filename: &str) 
     Ok(())
 }
 
+/// End-to-end "build a Kraken taxonomy from NCBI dumps" helper used by the libtax CLI.
+/// Parses `names.dmp`/`nodes.dmp`, marks every taxid referenced in `seqid2taxid` (plus
+/// its ancestors), then converts to Kraken's BFS-numbered binary format at `taxon_filename`.
 pub fn generate_taxonomy_libtax(
     names: &str,
     nodes: &str,
@@ -624,16 +691,22 @@ pub fn generate_taxonomy_libtax(
     ncbi_taxonomy.convert_to_kraken_taxonomy(taxon_filename)
 }
 
+/// Explicitly drop a taxonomy. In Rust this is the same as letting it go out of scope;
+/// kept as a free function so libtax-style call sites (which mirror the original C API)
+/// remain symmetric with `init_taxonomy`.
 pub fn destroy_taxonomy(_t: Taxonomy) {}
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    /// Path to the vendored NCBI dump fixtures used by the taxonomy tests.
     fn test_data_dir() -> String {
         format!("{}/kraken2/data", env!("CARGO_MANIFEST_DIR"))
     }
 
+    /// Build a taxonomy from the test fixtures and verify it is byte-identical to the
+    /// C++-generated `taxo.k2d` reference. Guards on-disk compatibility.
     #[test]
     fn test_taxonomy_roundtrip_matches_reference() {
         // Compare against C++-generated reference file
@@ -692,6 +765,8 @@ mod tests {
         );
     }
 
+    /// Sanity-check the core LCA invariants: identity under the 0 sentinel, reflexivity,
+    /// root-dominance, and ancestor-resolution against the reference taxonomy.
     #[test]
     fn test_taxonomy_lca() {
         // Load reference taxonomy and test LCA properties
@@ -726,6 +801,8 @@ mod tests {
         }
     }
 
+    /// Exercise the libtax-style free-function helpers (`get_lca`, `get_parent_id`,
+    /// `taxid_to_name`, etc.) against the reference taxonomy.
     #[test]
     fn test_libtax_helpers() {
         let ref_path = format!("{}/tests/reference/taxo.k2d", env!("CARGO_MANIFEST_DIR"));
@@ -744,6 +821,8 @@ mod tests {
         let _ = get_child_count(&tax, 1);
     }
 
+    /// Verify the seqid-to-taxid map parser (including the zero-taxid skip) and the
+    /// `get_child_taxids` walker over a node's contiguous child block.
     #[test]
     fn test_read_id_to_taxon_map_and_get_child_taxids() {
         let tmp_dir = tempfile::tempdir().unwrap();

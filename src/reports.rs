@@ -31,6 +31,8 @@ pub fn get_clade_counters(tax: &Taxonomy, call_counters: &TaxonCounters) -> Taxo
     clade_counters
 }
 
+/// Map an NCBI rank string to its single-character MetaPhlAn (MPA) code.
+/// Returns `None` for ranks not represented in MPA-style reports.
 fn rank_to_mpa_code(rank: &str) -> Option<char> {
     match rank {
         "superkingdom" | "domain" => Some('d'),
@@ -45,6 +47,9 @@ fn rank_to_mpa_code(rank: &str) -> Option<char> {
     }
 }
 
+/// Map an NCBI rank string to its single-character Kraken report code
+/// (uppercase variant of the MPA code). Returns `None` for ranks not
+/// shown in standard Kraken reports.
 fn rank_to_kraken_code(rank: &str) -> Option<char> {
     match rank {
         "superkingdom" | "domain" => Some('D'),
@@ -59,6 +64,7 @@ fn rank_to_kraken_code(rank: &str) -> Option<char> {
     }
 }
 
+/// Write one tab-separated MPA-style report line: `taxonomy_line\tclade_count`.
 pub fn print_mpa_style_report_line(ofs: &mut dyn Write, clade_count: u64, taxonomy_line: &str) {
     writeln!(ofs, "{}\t{}", taxonomy_line, clade_count).ok();
 }

@@ -56,8 +56,10 @@ impl Default for BuildOptions {
     }
 }
 
-/// Extract NCBI sequence IDs from a FASTA header.
-/// Handles \x01 delimiters used in non-redundant databases.
+/// Extract NCBI sequence IDs from a FASTA header. NCBI's non-redundant
+/// databases pack multiple accessions onto one header line, separated by
+/// 0x01 bytes; this returns every sequence ID found, not just the first.
+/// IDs end at the first whitespace character after each delimiter.
 pub fn extract_ncbi_sequence_ids(header: &str) -> Vec<String> {
     let mut list = Vec::new();
     let mut current = String::new();
@@ -122,9 +124,10 @@ pub fn generate_taxonomy(
     ncbi_tax.convert_to_kraken_taxonomy(output_filename)
 }
 
-/// Set the LCA for a minimizer in the hash table.
-/// Retries CompareAndSet in a loop until success.
-/// Used in the deterministic build path.
+/// Set the value associated with `minimizer` in the hash table to the LCA of the
+/// existing value and `taxid`. Retries `compare_and_set` in a loop, folding any
+/// concurrent update into the running LCA so the final stored taxon is the LCA
+/// of all writers.
 pub fn set_minimizer_lca(
     hash: &CompactHashTable,
     minimizer: u64,
@@ -138,9 +141,13 @@ pub fn set_minimizer_lca(
     }
 }
 
-/// Deterministic sequence processing for a single sequence.
-/// Exact port of C++ `ProcessSequence()` from `build_db.cc:324-433`.
-/// Uses block/subblock decomposition with safe-prefix parallel insertion.
+/// Deterministic per-sequence processing. The sequence is split into overlapping
+/// blocks (overlap = k-1) and each block into overlapping subblocks. Subblock
+/// minimizers are gathered into 256 hash-zone-partitioned sets, then merged into
+/// a single sorted list. A "safe prefix" of minimizers whose hash-table insertion
+/// indices are all distinct is inserted in parallel; the remainder is reprocessed
+/// after the table state changes. This enforces a thread-count-independent
+/// insertion order so the resulting database is bit-for-bit reproducible.
 fn process_sequence_deterministic(
     seq: &str,
     taxid: HValue,
@@ -248,7 +255,10 @@ fn process_sequence_deterministic(
     }
 }
 
-/// Fast (nondeterministic) sequence processing.
+/// Fast (nondeterministic) sequence processing: scans `seq` for minimizers and
+/// merges each into the hash table directly via `compare_and_set` + LCA, with no
+/// safe-prefix arbitration. Faster than the deterministic path but the resulting
+/// database depends on thread scheduling.
 fn process_sequence_fast(
     seq: &str,
     taxid: HValue,
@@ -274,6 +284,10 @@ fn process_sequence_fast(
     }
 }
 
+/// A quick but nondeterministic build: streams sequences in block-sized chunks
+/// from stdin, resolves each header's taxid via the seqid-to-taxon map (LCA-ing
+/// multiple IDs from non-redundant headers), and dispatches to the fast
+/// minimizer-insertion path.
 fn process_sequences_fast(
     opts: &BuildOptions,
     id_to_taxon_map: &BTreeMap<String, TaxId>,
@@ -343,6 +357,10 @@ fn process_sequences_fast(
     Ok(())
 }
 
+/// Slightly slower but deterministic build path: streams sequences in
+/// block-sized chunks, resolves header taxids, and dispatches to the
+/// safe-prefix deterministic minimizer-insertion routine so output is
+/// independent of thread count.
 fn process_sequences(
     opts: &BuildOptions,
     id_to_taxon_map: &BTreeMap<String, TaxId>,
@@ -397,6 +415,9 @@ fn process_sequences(
     Ok(())
 }
 
+/// Parse `build_db` command-line arguments into `opts`, validating mutually
+/// exclusive flags, required parameters, and the relationships between `k`/`l`
+/// and block/subblock sizes. Mirrors the original `getopt`-based parser.
 fn parse_command_line(args: &[String], opts: &mut BuildOptions) -> io::Result<()> {
     let mut i = 1usize;
     while i < args.len() {
@@ -655,6 +676,9 @@ fn parse_command_line(args: &[String], opts: &mut BuildOptions) -> io::Result<()
     Ok(())
 }
 
+/// Return the build_db usage text. The `exit_code` argument is preserved for
+/// API parity with the original C++ entry point but is unused here — callers
+/// surface the string through a normal error path.
 fn usage(_exit_code: i32) -> String {
     [
         "Usage: build_db <options>",
@@ -681,6 +705,11 @@ fn usage(_exit_code: i32) -> String {
     .join("\n")
 }
 
+/// CLI entry point for `build_db`: parses args, reads the seqid-to-taxon map,
+/// generates and loads the taxonomy, sizes the compact hash table (honouring
+/// `-M` MiniKraken subsampling), drives the deterministic or fast build over
+/// stdin sequences, and writes `hash.k2d` and the IndexOptions file. Equivalent
+/// to `main()` in the original `build_db.cc`.
 pub fn build_db_main(args: &[String]) -> io::Result<()> {
     let mut opts = BuildOptions {
         spaced_seed_mask: DEFAULT_SPACED_SEED_MASK,

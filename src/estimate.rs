@@ -28,6 +28,9 @@ pub struct EstimateOptions {
 }
 
 impl Default for EstimateOptions {
+    /// Return the default capacity-estimation options matching the C++ defaults:
+    /// no `k`/`l` set (caller must supply), `n = DEFAULT_N` (4), single-threaded,
+    /// 30 MB block size, DNA input, and the default spaced-seed / toggle masks.
     fn default() -> Self {
         EstimateOptions {
             k: 0,
@@ -42,6 +45,13 @@ impl Default for EstimateOptions {
     }
 }
 
+/// Parse the `estimate_capacity` command-line arguments into [`EstimateOptions`].
+///
+/// Mirrors the C++ `ParseCommandLine`: short flags `-k`, `-l`, `-n`, `-X`, `-S`,
+/// `-T`, `-B`, `-p` are recognised. `-S` and `-T` accept binary bit strings and
+/// `-S` triggers spaced-seed mask expansion based on whether input is protein.
+/// Errors with `InvalidInput` for missing/illegal values; `-h`/`-?` returns the
+/// usage text as an `InvalidInput` error.
 pub fn parse_command_line(args: &[String], opts: &mut EstimateOptions) -> io::Result<()> {
     let mut i = 1usize;
     while i < args.len() {
@@ -174,6 +184,10 @@ pub fn parse_command_line(args: &[String], opts: &mut EstimateOptions) -> io::Re
     Ok(())
 }
 
+/// Return the human-readable usage text for `estimate_capacity`.
+///
+/// Unlike the C++ `usage()` (which writes to stderr and `exit()`s), this
+/// version returns the message as a `String` so callers decide how to surface it.
 pub fn usage(_exit_code: i32) -> String {
     [
         "Usage: estimate_capacity <options>",
@@ -192,6 +206,12 @@ pub fn usage(_exit_code: i32) -> String {
 }
 
 /// Process a single sequence for capacity estimation.
+///
+/// Scans `seq` with a [`MinimizerScanner`] configured from `opts`, hashes each
+/// non-ambiguous minimizer with MurmurHash3, and inserts it into the bucket in
+/// `sets` selected by the low `log2(RANGE_SECTIONS)` bits of the hash, but only
+/// when that bucket index is `< opts.n` (the range-partitioning sample size).
+/// Protein sequences are terminated with `*` if they aren't already.
 pub fn process_sequence(seq: &str, opts: &EstimateOptions, sets: &mut [HashSet<u64>]) {
     let mut seq_str = seq.to_string();
 
@@ -222,6 +242,16 @@ pub fn process_sequence(seq: &str, opts: &EstimateOptions, sets: &mut [HashSet<u
     }
 }
 
+/// Drive the parallel range-partitioned minimizer estimation.
+///
+/// Spawns `opts.threads` rayon workers that pull sequences from a shared
+/// [`BatchSequenceReader`] (reading FASTA/FASTQ from stdin). Each worker
+/// maintains its own vector of `opts.n` `HashSet`s tracking distinct minimizers
+/// whose hash code falls in the first `n` of `RANGE_SECTIONS` (1024) buckets;
+/// per-worker sets are merged at the end. The returned capacity estimate
+/// extrapolates the observed distinct count by `RANGE_SECTIONS / opts.n`
+/// (with `+1` to guarantee a non-zero result), matching the C++
+/// `ProcessSequences` formula.
 pub fn process_sequences(opts: &EstimateOptions) -> io::Result<usize> {
     let threads = opts.threads.max(1);
     let n = opts.n;
@@ -278,6 +308,10 @@ pub fn process_sequences(opts: &EstimateOptions) -> io::Result<usize> {
     Ok((sum_set_sizes as f64 * RANGE_SECTIONS as f64 / opts.n as f64) as usize)
 }
 
+/// Entry point used by the `estimate_capacity` CLI shim.
+///
+/// Parses `args`, then runs [`process_sequences`] which reads sequences from
+/// stdin and returns the extrapolated distinct-minimizer count.
 pub fn estimate_capacity_main(args: &[String]) -> io::Result<usize> {
     let mut opts = EstimateOptions::default();
     parse_command_line(args, &mut opts)?;
@@ -285,7 +319,11 @@ pub fn estimate_capacity_main(args: &[String]) -> io::Result<usize> {
 }
 
 /// Estimate the number of distinct minimizers in the input (from stdin).
-/// Returns the estimated capacity.
+///
+/// Single-threaded library variant of [`process_sequences`]: streams FASTA/FASTQ
+/// from stdin in `opts.block_size` chunks, accumulating distinct minimizers in
+/// `opts.n` range-partitioned `HashSet`s, then extrapolates the sample by
+/// `RANGE_SECTIONS / opts.n`. Returns the estimated capacity.
 pub fn estimate_capacity(opts: &EstimateOptions) -> io::Result<usize> {
     let mut reader = BatchSequenceReader::new(None)?;
     let mut sets: Vec<HashSet<u64>> = (0..opts.n).map(|_| HashSet::new()).collect();
@@ -301,6 +339,11 @@ pub fn estimate_capacity(opts: &EstimateOptions) -> io::Result<usize> {
 }
 
 /// Estimate capacity from a list of files (instead of stdin).
+///
+/// Library-friendly counterpart to [`estimate_capacity`] that opens each input
+/// file in turn through [`BatchSequenceReader`] and accumulates a single shared
+/// set of range-partitioned distinct-minimizer buckets across all inputs before
+/// extrapolating by `RANGE_SECTIONS / opts.n`.
 pub fn estimate_capacity_from_files(
     filenames: &[String],
     opts: &EstimateOptions,
@@ -324,6 +367,7 @@ pub fn estimate_capacity_from_files(
 mod tests {
     use super::*;
 
+    /// Verify that `-k`, `-l`, `-n`, `-B`, `-p` flags populate [`EstimateOptions`].
     #[test]
     fn test_parse_command_line() {
         let args = vec![
@@ -348,6 +392,7 @@ mod tests {
         assert_eq!(opts.threads, 2);
     }
 
+    /// Sanity-check that `usage()` mentions the program name and the `-k` flag.
     #[test]
     fn test_usage() {
         let text = usage(0);
@@ -355,6 +400,8 @@ mod tests {
         assert!(text.contains("-k INT"));
     }
 
+    /// Smoke-test that processing a short DNA string produces at least one
+    /// minimizer in the range-partitioned hash-set buckets.
     #[test]
     fn test_process_sequence() {
         let opts = EstimateOptions {

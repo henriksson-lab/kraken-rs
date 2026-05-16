@@ -188,6 +188,9 @@ struct BlastDefline {
     other_info: Vec<Integer>,
 }
 
+/// Count the number of leading zero bits in `x` (Hacker's Delight).
+///
+/// Returns 32 when `x == 0`. Ported from `nlz` in `blast_utils.c`.
 fn nlz(mut x: u32) -> u32 {
     if x == 0 {
         return 32;
@@ -213,16 +216,24 @@ fn nlz(mut x: u32) -> u32 {
     n - (x >> 31)
 }
 
+/// Round `n` up to the next power of two using [`nlz`].
+/// Ported from `next_power_of_2` in `blast_utils.c`.
 fn next_power_of_2(n: u32) -> u32 {
     1u32 << (32 - nlz(n.wrapping_sub(1)))
 }
 
+/// Grow `data` so that it can hold `new_size` elements of `element_size`
+/// bytes each. Mirrors C's `realloc`-based `alloc_memory` from
+/// `blast_utils.c`; the Rust port resizes a `Vec<u8>` in place.
 fn alloc_memory(data: &mut Vec<u8>, element_size: u32, old_size: u32, new_size: u32) {
     if new_size > old_size {
         data.resize((element_size * new_size) as usize, 0);
     }
 }
 
+/// Read up to `element_size * buffer_len` bytes from `reader` into
+/// `buffer`. Returns the number of full elements read. Ports
+/// `read_into_buffer` from `blast_utils.c` (a thin `fread` wrapper).
 fn read_into_buffer<R: Read>(
     reader: &mut R,
     buffer: &mut [u8],
@@ -234,33 +245,43 @@ fn read_into_buffer<R: Read>(
     Ok((bytes_read / element_size as usize) as u32)
 }
 
+/// Construct an empty `BlastString`. Ports `init_string` from
+/// `blast_to_fasta.c`.
 fn init_string() -> BlastString {
     BlastString::default()
 }
 
+/// Length in bytes of the logical string (excluding capacity slack).
 fn string_length(s: &BlastString) -> u32 {
     s.len
 }
 
+/// Allocated capacity of the underlying buffer.
 #[allow(dead_code)]
 fn string_capacity(s: &BlastString) -> u32 {
     s.cap
 }
 
+/// Reset the string to length zero without releasing its buffer.
 fn string_clear(s: &mut BlastString) {
     s.len = 0;
 }
 
+/// Borrow the logical contents of the string (does not include any NUL
+/// terminator).
 fn string_data(s: &BlastString) -> &[u8] {
     &s.string[..s.len as usize]
 }
 
+/// Mutable variant of [`string_data`].
 #[allow(dead_code)]
 fn string_data_mut(s: &mut BlastString) -> &mut [u8] {
     let len = s.len as usize;
     &mut s.string[..len]
 }
 
+/// Ensure the buffer has a trailing NUL byte and return a C-string slice
+/// suitable for printing. Ports `to_c_string` from `blast_to_fasta.c`.
 fn to_c_string(s: &mut BlastString) -> &[u8] {
     let len = s.len as usize;
     if s.string.len() <= len {
@@ -271,6 +292,9 @@ fn to_c_string(s: &mut BlastString) -> &[u8] {
     &s.string[..=len]
 }
 
+/// Append a single byte to the string, growing the buffer geometrically
+/// when capacity is exhausted. Ports `string_append_char` from
+/// `blast_to_fasta.c`.
 fn string_append_char(s: &mut BlastString, c: u8) {
     if s.len + 1 >= s.cap {
         let new_cap = next_power_of_2(s.cap + 1);
@@ -281,6 +305,9 @@ fn string_append_char(s: &mut BlastString, c: u8) {
     s.len += 1;
 }
 
+/// Append the decimal representation of `num` to the string. Ports
+/// `string_append_int` from `blast_to_fasta.c` (the C version uses
+/// `log10`/`pow`; this is the integer-only equivalent).
 fn string_append_int(s: &mut BlastString, mut num: u32) {
     if num == 0 {
         string_append_char(s, b'0');
@@ -299,12 +326,17 @@ fn string_append_int(s: &mut BlastString, mut num: u32) {
     }
 }
 
+/// Append a `&str`'s UTF-8 bytes to the string. Ports
+/// `string_append_str` from `blast_to_fasta.c`.
 fn string_append_str(s: &mut BlastString, string: &str) {
     for &byte in string.as_bytes() {
         string_append_char(s, byte);
     }
 }
 
+/// Copy `len` bytes from `s2` starting at `s2_start` into `s1` starting
+/// at `s1_start`, growing `s1` if necessary. Returns the number of bytes
+/// actually copied. Ports `string_copy` from `blast_to_fasta.c`.
 #[allow(dead_code)]
 fn string_copy(
     s1: &mut BlastString,
@@ -331,11 +363,16 @@ fn string_copy(
     len
 }
 
+/// Append `len` bytes from `s2` (starting at `s2_start`) to the end of
+/// `s1`. Ports `string_append` from `blast_to_fasta.c`.
 #[allow(dead_code)]
 fn string_append(s1: &mut BlastString, s2: &BlastString, s2_start: u32, len: u32) -> u32 {
     string_copy(s1, s2, s1.len, s2_start, len)
 }
 
+/// Ensure the string has capacity for at least `size + 1` bytes (the
+/// extra byte reserves room for a NUL terminator). Ports
+/// `string_reserve` from `blast_to_fasta.c`.
 fn string_reserve(s: &mut BlastString, size: u32) {
     alloc_memory(&mut s.string, 1, s.cap, size + 1);
     if size > s.cap {
@@ -343,6 +380,8 @@ fn string_reserve(s: &mut BlastString, size: u32) {
     }
 }
 
+/// Read `amt` bytes from `reader` directly into the string buffer at
+/// `offset`. Ports `string_read_from_file` from `blast_to_fasta.c`.
 #[allow(dead_code)]
 fn string_read_from_file<R: Read>(
     string: &mut BlastString,
@@ -358,6 +397,8 @@ fn string_read_from_file<R: Read>(
     Ok(())
 }
 
+/// Release the buffer backing the string and reset length/capacity to
+/// zero. Ports `free_string` from `blast_to_fasta.c`.
 fn free_string(s: &mut BlastString) {
     s.string.clear();
     s.string.shrink_to_fit();
@@ -386,6 +427,11 @@ enum Amb {
     Amb64(Amb64),
 }
 
+/// Decode a 32-bit packed ambiguity record into its `(offset, length,
+/// value)` fields. The C version (`u32_to_amb32` in `blast_to_fasta.c`)
+/// relies on a bitfield struct + reinterpret cast; we unpack the bits
+/// explicitly: offset in the low 24 bits, then 4 bits of length, then 4
+/// bits of value.
 fn u32_to_amb32(n: u32) -> Amb32 {
     Amb32 {
         offset: n & 0x00ff_ffff,
@@ -394,6 +440,10 @@ fn u32_to_amb32(n: u32) -> Amb32 {
     }
 }
 
+/// Decode a 64-bit packed ambiguity record. Counterpart of [`u32_to_amb32`]
+/// for the format-1 (large-genome) ambiguity table; offset is the low
+/// 32 bits, then 16 unused bits, 12 length bits, and 4 value bits.
+/// Ports `u64_to_amb64` from `blast_to_fasta.c`.
 fn u64_to_amb64(n: u64) -> Amb64 {
     Amb64 {
         offset: (n & 0xffff_ffff) as u32,
@@ -403,16 +453,23 @@ fn u64_to_amb64(n: u64) -> Amb64 {
     }
 }
 
+/// Read a big-endian 32-bit integer (BLAST stores everything in network
+/// byte order). Ports `read_int` from `blast_to_fasta.c`.
 fn read_int(file: &mut File) -> io::Result<u32> {
     read_be_u32(file)
 }
 
+/// Read a big-endian 64-bit integer and truncate to `u32` (matching the
+/// C return type). Ports `read_long` from `blast_to_fasta.c`.
 fn read_long(file: &mut File) -> io::Result<u32> {
     let mut buf = [0u8; 8];
     file.read_exact(&mut buf)?;
     Ok(u64::from_be_bytes(buf) as u32)
 }
 
+/// Read a fixed-length array of `element_size * length` bytes into a
+/// freshly allocated buffer (with one extra element reserved, matching
+/// the C allocator). Ports `read_array` from `blast_to_fasta.c`.
 fn read_array(file: &mut File, element_size: u32, length: u32) -> io::Result<Vec<u8>> {
     let mut array = vec![0u8; (element_size * (length + 1)) as usize];
     let read_len = (element_size * length) as usize;
@@ -420,10 +477,14 @@ fn read_array(file: &mut File, element_size: u32, length: u32) -> io::Result<Vec
     Ok(array)
 }
 
+/// Open `filename` for reading. Ports `open_file` from `blast_utils.c`
+/// (with the C `errx`-on-failure behaviour replaced by an `io::Error`).
 fn open_file(filename: &str) -> io::Result<File> {
     File::open(filename)
 }
 
+/// Read a length-prefixed (big-endian u32 length) string from a BLAST
+/// index file. Ports `read_string` from `blast_to_fasta.c`.
 fn read_string(file: &mut File) -> io::Result<BlastString> {
     let len = read_int(file)?;
     let mut string = init_string();
@@ -433,6 +494,9 @@ fn read_string(file: &mut File) -> io::Result<BlastString> {
     Ok(string)
 }
 
+/// Open the BLAST `.nin`/`.pin` index file and construct an empty
+/// [`BlastIdxData`]. Call [`read_idx_data`] afterwards to populate it.
+/// Ports `init_idx_data` from `blast_to_fasta.c`.
 fn init_idx_data(filename: &str) -> io::Result<BlastIdxData> {
     Ok(BlastIdxData {
         idx_file: open_file(filename)?,
@@ -451,6 +515,11 @@ fn init_idx_data(filename: &str) -> io::Result<BlastIdxData> {
     })
 }
 
+/// Parse the BLAST index header: format version, sequence type, volume
+/// number, title/lmdb/date strings, OID count, volume length, max
+/// sequence length, and the three big-endian offset arrays
+/// (`hdr_arr`, `seq_arr`, `amb_arr`). Ports `read_idx_data` from
+/// `blast_to_fasta.c`.
 fn read_idx_data(idx_data: &mut BlastIdxData) -> io::Result<()> {
     idx_data.fmt_version = read_int(&mut idx_data.idx_file)?;
     idx_data.db_seq_type = read_int(&mut idx_data.idx_file)?;
@@ -469,6 +538,8 @@ fn read_idx_data(idx_data: &mut BlastIdxData) -> io::Result<()> {
     Ok(())
 }
 
+/// Release the buffers owned by an index-data struct. Ports
+/// `free_idx_data` from `blast_to_fasta.c`.
 fn free_idx_data(idx_data: &mut BlastIdxData) {
     free_string(&mut idx_data.title);
     free_string(&mut idx_data.lmdb_file);
@@ -478,16 +549,25 @@ fn free_idx_data(idx_data: &mut BlastIdxData) {
     idx_data.amb_arr.clear();
 }
 
+/// Read the `index`-th big-endian `u32` from a packed offset array
+/// (`hdr_arr`/`seq_arr`/`amb_arr`). The C code reads `uint32_t *`
+/// arrays directly and applies `ntohl`.
 fn offset_at(offsets: &[u8], index: u32) -> u32 {
     let start = (index as usize) * 4;
     u32::from_be_bytes(offsets[start..start + 4].try_into().unwrap())
 }
 
+/// Store a `u32` (big-endian) at the `index`-th slot of a packed offset
+/// array. Used when rewriting the header-offset array into per-OID
+/// block lengths in [`init_hdr_data`].
 fn set_offset(offsets: &mut [u8], index: u32, value: u32) {
     let start = (index as usize) * 4;
     offsets[start..start + 4].copy_from_slice(&value.to_be_bytes());
 }
 
+/// Open the BLAST ASN.1 header file (`.nhr`/`.phr`) and construct an
+/// [`Asn1Data`] cursor pre-populated with the per-OID block lengths.
+/// Ports `init_asn1` from `blast_defline.c`.
 fn init_asn1(filename: &str, block_lens: &[u32], num_oids: u32) -> io::Result<Asn1Data> {
     Ok(Asn1Data {
         asn1_file: open_file(filename)?,
@@ -501,6 +581,8 @@ fn init_asn1(filename: &str, block_lens: &[u32], num_oids: u32) -> io::Result<As
     })
 }
 
+/// Release the read-ahead buffer owned by an [`Asn1Data`] cursor.
+/// Ports `free_asn1` from `blast_defline.c`.
 fn free_asn1(asn1: &mut Asn1Data) {
     asn1.buffer.clear();
     asn1.buffer.shrink_to_fit();
@@ -509,6 +591,10 @@ fn free_asn1(asn1: &mut Asn1Data) {
     asn1.curr_pos = 0;
 }
 
+/// Append the next OID's ASN.1 block to the in-memory buffer, growing
+/// the buffer geometrically when needed. Returns the number of bytes
+/// loaded (0 once all OIDs are exhausted). Ports `load_more_data` from
+/// `blast_defline.c`.
 fn load_more_data(asn1_data: &mut Asn1Data) -> io::Result<usize> {
     if asn1_data.curr_oid == asn1_data.num_oids {
         return Ok(0);
@@ -537,6 +623,9 @@ fn load_more_data(asn1_data: &mut Asn1Data) -> io::Result<usize> {
     Ok(block_len)
 }
 
+/// Consume and return the next byte from the ASN.1 cursor, lazily
+/// loading more data when the buffer is exhausted. Ports
+/// `asn1_get_byte` from `blast_defline.c`.
 fn asn1_get_byte(asn1_data: &mut Asn1Data) -> io::Result<u8> {
     if asn1_data.curr_pos == asn1_data.buf_len {
         load_more_data(asn1_data)?;
@@ -547,10 +636,14 @@ fn asn1_get_byte(asn1_data: &mut Asn1Data) -> io::Result<u8> {
     Ok(byte)
 }
 
+/// Rewind the ASN.1 cursor by one byte. Ports `asn1_backtrack` from
+/// `blast_defline.c`.
 fn asn1_backtrack(asn1_data: &mut Asn1Data) {
     asn1_data.curr_pos -= 1;
 }
 
+/// Look at the next byte without consuming it, loading more data if
+/// needed. Ports `asn1_peek_byte` from `blast_defline.c`.
 fn asn1_peek_byte(asn1_data: &mut Asn1Data) -> io::Result<u8> {
     if asn1_data.curr_pos == asn1_data.buf_len {
         load_more_data(asn1_data)?;
@@ -559,6 +652,9 @@ fn asn1_peek_byte(asn1_data: &mut Asn1Data) -> io::Result<u8> {
     Ok(asn1_data.buffer[asn1_data.curr_pos])
 }
 
+/// Consume an ASN.1 SEQUENCE start marker (tag `0x30`, indefinite
+/// length `0x80`). Returns `true` if a sequence was successfully
+/// entered. Ports `asn1_sequence_start` from `blast_defline.c`.
 fn asn1_sequence_start(asn1_data: &mut Asn1Data) -> io::Result<bool> {
     if asn1_peek_byte(asn1_data)? != 0x30 {
         return Ok(false);
@@ -569,12 +665,18 @@ fn asn1_sequence_start(asn1_data: &mut Asn1Data) -> io::Result<bool> {
     Ok(len == 0x80)
 }
 
+/// Consume the two NUL octets that terminate an indefinite-length ASN.1
+/// tag. Returns `true` if the end marker was actually present. Ports
+/// `asn1_indefinite_tag_end` from `blast_defline.c`.
 fn asn1_indefinite_tag_end(asn1_data: &mut Asn1Data) -> io::Result<bool> {
     let null_octet1 = asn1_get_byte(asn1_data)?;
     let null_octet2 = asn1_get_byte(asn1_data)?;
     Ok(null_octet1 == 0 && null_octet2 == 0)
 }
 
+/// Peek for an end-of-sequence marker without permanently consuming it
+/// (used by loop conditions in defline parsing). Ports
+/// `asn1_is_end_of_sequence` from `blast_defline.c`.
 fn asn1_is_end_of_sequence(asn1_data: &mut Asn1Data) -> io::Result<bool> {
     let end = asn1_indefinite_tag_end(asn1_data)?;
     asn1_backtrack(asn1_data);
@@ -582,6 +684,11 @@ fn asn1_is_end_of_sequence(asn1_data: &mut Asn1Data) -> io::Result<bool> {
     Ok(end)
 }
 
+/// Decode an ASN.1 `VisibleString` (tag `0x1A`) into `string`.
+/// Handles both short-form length (one octet) and long-form length
+/// (the high bit signals an octet count for the actual length value).
+/// Returns the decoded string length. Ports `asn1_get_visible_string`
+/// from `blast_defline.c`.
 fn asn1_get_visible_string(
     asn1_data: &mut Asn1Data,
     string: &mut VisibleString,
@@ -612,6 +719,10 @@ fn asn1_get_visible_string(
     Ok(str_len)
 }
 
+/// Decode an ASN.1 INTEGER (tag `0x02`) into `num`. The integer's
+/// length is given by the byte following the tag; we accumulate the
+/// big-endian bytes into a `u32`. Ports `asn1_get_integer` from
+/// `blast_defline.c`.
 fn asn1_get_integer(asn1_data: &mut Asn1Data, num: &mut Integer) -> io::Result<i32> {
     let tag = asn1_get_byte(asn1_data)?;
     debug_assert_eq!(tag, 0x02);
@@ -626,12 +737,19 @@ fn asn1_get_integer(asn1_data: &mut Asn1Data, num: &mut Integer) -> io::Result<i
     Ok(1)
 }
 
+/// Consume an explicit context-specific tag (one byte field number
+/// plus one length byte) and return the field number. Ports
+/// `get_explicit_tag` from `blast_defline.c`.
 fn get_explicit_tag(asn1_data: &mut Asn1Data) -> io::Result<u8> {
     let field_no = asn1_get_byte(asn1_data)?;
     let _ = asn1_get_byte(asn1_data)?;
     Ok(field_no)
 }
 
+/// If the next tag matches `field_tag`, consume an explicit-tag-wrapped
+/// VisibleString into `destination`; otherwise leave the cursor
+/// unchanged. Ports `asn1_get_optional_visible_string_field` from
+/// `blast_defline.c`.
 fn asn1_get_optional_visible_string_field(
     asn1_data: &mut Asn1Data,
     field_tag: u8,
@@ -645,6 +763,9 @@ fn asn1_get_optional_visible_string_field(
     Ok(())
 }
 
+/// Like [`asn1_get_optional_visible_string_field`] but for INTEGER
+/// fields. Ports `asn1_get_optional_integer_field` from
+/// `blast_defline.c`.
 fn asn1_get_optional_integer_field(
     asn1_data: &mut Asn1Data,
     field_tag: u8,
@@ -658,6 +779,8 @@ fn asn1_get_optional_integer_field(
     Ok(())
 }
 
+/// Consume an explicit-tag-wrapped INTEGER field that must be present.
+/// Ports `asn1_get_mandatory_integer_field` from `blast_defline.c`.
 fn asn1_get_mandatory_integer_field(
     asn1_data: &mut Asn1Data,
     destination: &mut Integer,
@@ -668,6 +791,9 @@ fn asn1_get_mandatory_integer_field(
     Ok(())
 }
 
+/// Consume an explicit-tag-wrapped VisibleString field that must be
+/// present. Ports `asn1_get_mandatory_visible_string_field` from
+/// `blast_defline.c`.
 fn asn1_get_mandatory_visible_string_field(
     asn1_data: &mut Asn1Data,
     destination: &mut VisibleString,
@@ -678,6 +804,9 @@ fn asn1_get_mandatory_visible_string_field(
     Ok(())
 }
 
+/// Decode an ASN.1 `Date` value (either a free-form `0xA0` string or a
+/// `Date-std` structure with year/month/day/season/hour/minute/second
+/// fields). Ports `get_date` from `blast_defline.c`.
 fn get_date(asn1_data: &mut Asn1Data, d: &mut Date) -> io::Result<i32> {
     let field_no = asn1_peek_byte(asn1_data)?;
     if field_no == 0xA0 {
@@ -701,6 +830,8 @@ fn get_date(asn1_data: &mut Asn1Data, d: &mut Date) -> io::Result<i32> {
     Ok(1)
 }
 
+/// Decode an ASN.1 `Dbtag` (database name + object id). Ports
+/// `get_db_tag` from `blast_defline.c`.
 fn get_db_tag(asn1_data: &mut Asn1Data, tag: &mut DbTag) -> io::Result<i32> {
     *tag = DbTag::default();
 
@@ -712,6 +843,9 @@ fn get_db_tag(asn1_data: &mut Asn1Data, tag: &mut DbTag) -> io::Result<i32> {
     Ok(1)
 }
 
+/// Decode an ASN.1 `PDB-seq-id` (molecule + chain + optional release
+/// date + optional chain id). Ports `get_pdb_seq_id` from
+/// `blast_defline.c`.
 fn get_pdb_seq_id(asn1_data: &mut Asn1Data, seqid: &mut PdbSeqId) -> io::Result<i32> {
     *seqid = PdbSeqId::default();
 
@@ -729,6 +863,8 @@ fn get_pdb_seq_id(asn1_data: &mut Asn1Data, seqid: &mut PdbSeqId) -> io::Result<
     Ok(1)
 }
 
+/// Decode an ASN.1 `Giimport-id` (numeric id plus optional db/release
+/// strings). Ports `get_gi_import_id` from `blast_defline.c`.
 fn get_gi_import_id(asn1_data: &mut Asn1Data, seqid: &mut GiImportId) -> io::Result<i32> {
     *seqid = GiImportId::default();
 
@@ -741,6 +877,8 @@ fn get_gi_import_id(asn1_data: &mut Asn1Data, seqid: &mut GiImportId) -> io::Res
     Ok(1)
 }
 
+/// Decode an ASN.1 `Textseq-id` (name/accession/release/version).
+/// Ports `get_text_seq_id` from `blast_defline.c`.
 fn get_text_seq_id(asn1_data: &mut Asn1Data, seqid: &mut TextSeqId) -> io::Result<i32> {
     *seqid = TextSeqId::default();
 
@@ -754,6 +892,8 @@ fn get_text_seq_id(asn1_data: &mut Asn1Data, seqid: &mut TextSeqId) -> io::Resul
     Ok(1)
 }
 
+/// Decode an ASN.1 `Patent-seq-id` (sequence index plus patent
+/// citation). Ports `get_patent_seq_id` from `blast_defline.c`.
 fn get_patent_seq_id(asn1_data: &mut Asn1Data, seqid: &mut PatentSeqId) -> io::Result<i32> {
     *seqid = PatentSeqId::default();
 
@@ -765,6 +905,9 @@ fn get_patent_seq_id(asn1_data: &mut Asn1Data, seqid: &mut PatentSeqId) -> io::R
     Ok(1)
 }
 
+/// Decode an ASN.1 `Object-id` — either an integer (`0xA0` branch) or
+/// a VisibleString. The `id_type` field records which arm was taken.
+/// Ports `get_object_id` from `blast_defline.c`.
 fn get_object_id(asn1_data: &mut Asn1Data, id: &mut ObjectId) -> io::Result<i32> {
     *id = ObjectId::default();
 
@@ -781,6 +924,9 @@ fn get_object_id(asn1_data: &mut Asn1Data, id: &mut ObjectId) -> io::Result<i32>
     Ok(1)
 }
 
+/// Decode an ASN.1 `Id-pat` patent identifier (country + either a
+/// patent number or an application number, plus an optional document
+/// type). Ports `get_id_pat` from `blast_defline.c`.
 fn get_id_pat(asn1_data: &mut Asn1Data, id: &mut IdPat) -> io::Result<i32> {
     *id = IdPat::default();
 
@@ -799,6 +945,11 @@ fn get_id_pat(asn1_data: &mut Asn1Data, id: &mut IdPat) -> io::Result<i32> {
     Ok(1)
 }
 
+/// Decode an ASN.1 `Seq-id` CHOICE. Dispatches on the explicit
+/// context-specific tag (`0xA0`–`0xB3`) to one of the typed seq-id
+/// parsers and records the chosen variant in `seqid.seq_id_type`.
+/// Returns the variant code (or [`SEQ_NONE`] when the next byte is not
+/// a recognised seq-id tag). Ports `get_seq_id` from `blast_defline.c`.
 fn get_seq_id(asn1_data: &mut Asn1Data, seqid: &mut SeqId) -> io::Result<i32> {
     let field_no = asn1_peek_byte(asn1_data)?;
     match field_no {
@@ -928,6 +1079,9 @@ fn get_seq_id(asn1_data: &mut Asn1Data, seqid: &mut SeqId) -> io::Result<i32> {
     Ok(seqid.seq_id_type)
 }
 
+/// Decode an ASN.1 SEQUENCE OF INTEGER into `vec`, stopping when the
+/// next tag is no longer `0x02`. Ports `get_ints` from
+/// `blast_defline.c`.
 fn get_ints(asn1_data: &mut Asn1Data, vec: &mut Vec<Integer>) -> io::Result<i32> {
     let mut value = 0;
     let _ = asn1_sequence_start(asn1_data)?;
@@ -944,6 +1098,9 @@ fn get_ints(asn1_data: &mut Asn1Data, vec: &mut Vec<Integer>) -> io::Result<i32>
     Ok(1)
 }
 
+/// Decode the optional `Blast-def-line.memberships` field (tag `0xA3`).
+/// Returns 0 if the field is absent. Ports `get_memberships` from
+/// `blast_defline.c`.
 fn get_memberships(asn1_data: &mut Asn1Data, memberships: &mut Vec<Integer>) -> io::Result<i32> {
     if asn1_peek_byte(asn1_data)? != 0xA3 {
         return Ok(0);
@@ -956,6 +1113,9 @@ fn get_memberships(asn1_data: &mut Asn1Data, memberships: &mut Vec<Integer>) -> 
     Ok(1)
 }
 
+/// Decode the optional `Blast-def-line.links` field (tag `0xA4`).
+/// Returns 0 if the field is absent. Ports `get_links` from
+/// `blast_defline.c`.
 fn get_links(asn1_data: &mut Asn1Data, links: &mut Vec<Integer>) -> io::Result<i32> {
     if asn1_peek_byte(asn1_data)? != 0xA4 {
         return Ok(0);
@@ -968,6 +1128,9 @@ fn get_links(asn1_data: &mut Asn1Data, links: &mut Vec<Integer>) -> io::Result<i
     Ok(1)
 }
 
+/// Decode the optional `Blast-def-line.other-info` field (tag `0xA5`).
+/// Returns 0 if the field is absent. Ports `get_other_info` from
+/// `blast_defline.c`.
 fn get_other_info(asn1_data: &mut Asn1Data, other_info: &mut Vec<Integer>) -> io::Result<i32> {
     if asn1_peek_byte(asn1_data)? != 0xA5 {
         return Ok(0);
@@ -980,6 +1143,10 @@ fn get_other_info(asn1_data: &mut Asn1Data, other_info: &mut Vec<Integer>) -> io
     Ok(1)
 }
 
+/// Decode a single `Blast-def-line` SEQUENCE: title, seq-id list,
+/// optional taxid, and optional memberships/links/other-info vectors.
+/// Returns 0 if the cursor isn't currently at a SEQUENCE start. Ports
+/// `get_blast_defline` from `blast_defline.c`.
 fn get_blast_defline(asn1_data: &mut Asn1Data, defline: &mut BlastDefline) -> io::Result<i32> {
     if !asn1_sequence_start(asn1_data)? {
         return Ok(0);
@@ -1006,10 +1173,15 @@ fn get_blast_defline(asn1_data: &mut Asn1Data, defline: &mut BlastDefline) -> io
     Ok(1)
 }
 
+/// Construct an empty `BlastDefline`. Ports `init_blast_defline` from
+/// `blast_defline.c`.
 fn init_blast_defline() -> BlastDefline {
     BlastDefline::default()
 }
 
+/// Clear all fields of `defline` without freeing the backing vectors,
+/// so the slot can be reused for the next OID. Ports
+/// `reset_blast_defline` from `blast_defline.c`.
 fn reset_blast_defline(defline: &mut BlastDefline) {
     defline.title.clear();
     defline.seq_ids.clear();
@@ -1019,6 +1191,8 @@ fn reset_blast_defline(defline: &mut BlastDefline) {
     defline.taxid = 0;
 }
 
+/// Release the dynamic storage held by `defline`. Ports
+/// `destroy_blast_defline` from `blast_defline.c`.
 fn destroy_blast_defline(defline: &mut BlastDefline) {
     reset_blast_defline(defline);
     defline.seq_ids.shrink_to_fit();
@@ -1027,6 +1201,10 @@ fn destroy_blast_defline(defline: &mut BlastDefline) {
     defline.other_info.shrink_to_fit();
 }
 
+/// Decode the top-level `SEQUENCE OF Blast-def-line` for the current
+/// OID block, growing `deflines` as needed and returning the number of
+/// deflines parsed (or 0 when the cursor is past the last OID). Ports
+/// `get_blast_deflines` from `blast_defline.c`.
 fn get_blast_deflines(
     asn1_data: &mut Asn1Data,
     deflines: &mut Vec<BlastDefline>,
@@ -1062,6 +1240,9 @@ fn get_blast_deflines(
     Ok(i as i32)
 }
 
+/// Convert the cumulative header-offset array into per-OID block
+/// lengths and construct a [`BlastHdrData`] that streams ASN.1 deflines
+/// out of `filename`. Ports `init_hdr_data` from `blast_to_fasta.c`.
 fn init_hdr_data(
     filename: &str,
     hdr_offsets: &mut [u8],
@@ -1085,6 +1266,9 @@ fn init_hdr_data(
     })
 }
 
+/// Release every resource owned by `hdr`: cached deflines, the FASTA
+/// header buffer, the ASN.1 cursor, and the optional header file
+/// handle. Ports `free_hdr_data` from `blast_to_fasta.c`.
 fn free_hdr_data(hdr: &mut BlastHdrData) {
     for defline in &mut hdr.deflines {
         destroy_blast_defline(defline);
@@ -1095,6 +1279,9 @@ fn free_hdr_data(hdr: &mut BlastHdrData) {
     hdr.hdr_file = None;
 }
 
+/// Format a `Dbtag` as `db_id` (using the integer or string variant of
+/// the inner `ObjectId`). Ports `db_tag_to_string` from
+/// `blast_to_fasta.c`.
 fn db_tag_to_string(s: &mut BlastString, tag: &DbTag) {
     string_append_bytes(s, &tag.db);
     string_append_char(s, b'_');
@@ -1105,6 +1292,8 @@ fn db_tag_to_string(s: &mut BlastString, tag: &DbTag) {
     }
 }
 
+/// Format a `Textseq-id` as `accession[.version]`. Ports
+/// `text_seq_id_to_string` from `blast_to_fasta.c`.
 fn text_seq_id_to_string(s: &mut BlastString, seqid: &TextSeqId) {
     string_append_bytes(s, &seqid.acc);
     if seqid.ver > 0 {
@@ -1113,6 +1302,9 @@ fn text_seq_id_to_string(s: &mut BlastString, seqid: &TextSeqId) {
     }
 }
 
+/// Format a `PDB-seq-id` as `mol[_chain_id]` or `mol_<chain-byte>` when
+/// only the legacy numeric chain field is set. Ports
+/// `pdb_seq_id_to_string` from `blast_to_fasta.c`.
 fn pdb_seq_id_to_string(s: &mut BlastString, seqid: &PdbSeqId) {
     string_append_bytes(s, &seqid.mol);
     if !seqid.chain_id.is_empty() {
@@ -1124,6 +1316,10 @@ fn pdb_seq_id_to_string(s: &mut BlastString, seqid: &PdbSeqId) {
     }
 }
 
+/// Emit the FASTA header for the `curr_defline`-th defline: leading
+/// `>`, optional `kraken:taxid|...|` prefix, concatenated seq-ids, and
+/// the defline title. Ports `defline_to_header` from
+/// `blast_to_fasta.c`.
 fn defline_to_header(
     s: &mut BlastString,
     deflines: &[BlastDefline],
@@ -1152,6 +1348,10 @@ fn defline_to_header(
     string_append_bytes(s, &defline.title);
 }
 
+/// Concatenate the FASTA headers for all `num_deflines` parsed
+/// deflines, separated by spaces (matching BLAST's "merged" header
+/// output format). Ports `deflines_to_header` from
+/// `blast_to_fasta.c`.
 fn deflines_to_header(
     s: &mut BlastString,
     deflines: &[BlastDefline],
@@ -1166,10 +1366,17 @@ fn deflines_to_header(
     }
 }
 
+/// Convenience wrapper that pulls the next OID's deflines into the
+/// cached vector inside `hdr_data`. Ports `get_deflines` from
+/// `blast_to_fasta.c`.
 fn get_deflines(hdr_data: &mut BlastHdrData) -> io::Result<i32> {
     get_blast_deflines(&mut hdr_data.asn1, &mut hdr_data.deflines)
 }
 
+/// Open the BLAST sequence file (`.nsq`/`.psq`), discard the leading
+/// version byte, and pre-allocate the working sequence/buffer storage
+/// according to the maximum sequence length and maximum block size in
+/// the database. Ports `init_seq_data` from `blast_to_fasta.c`.
 fn init_seq_data(filename: &str, max_seq_len: u32, max_buf_size: u32) -> io::Result<BlastSeqData> {
     let mut seq_file = open_file(filename)?;
     let mut first_byte = [0u8; 1];
@@ -1190,6 +1397,9 @@ fn init_seq_data(filename: &str, max_seq_len: u32, max_buf_size: u32) -> io::Res
     })
 }
 
+/// Compute the largest delta between consecutive offsets in a
+/// cumulative offset array, i.e. the biggest single block we'll need
+/// to buffer. Ports `max_block_size` from `blast_to_fasta.c`.
 fn max_block_size(offsets: &[u8], length: u32) -> u32 {
     let mut max_length = 0;
     for i in 1..length {
@@ -1201,16 +1411,25 @@ fn max_block_size(offsets: &[u8], length: u32) -> u32 {
     max_length
 }
 
+/// An OID has ambiguity data iff the sequence block ends before the
+/// ambiguity-table offset. Ports `has_ambiguous_data` from
+/// `blast_to_fasta.c`.
 fn has_ambiguous_data(block_end: u32, amb_start: u32) -> bool {
     block_end != amb_start
 }
 
+/// Compute the number of nucleotides in a packed 2-bit block: if the
+/// number of nucleotides doesn't fill a full byte, the last byte
+/// encodes both nucleotides and the remainder count. Ports
+/// `get_nucleotide_length` from `blast_to_fasta.c`.
 #[allow(dead_code)]
 fn get_nucleotide_length(data: &[u8], data_length: usize) -> u32 {
     let remainder = data[data_length] as u32;
     ((data_length - 1) as u32) * 4 + remainder
 }
 
+/// Read the next OID's raw sequence block into `seq.buffer`. Ports
+/// `read_seq_block` from `blast_to_fasta.c`.
 fn read_seq_block(seq: &mut BlastSeqData, block_length: u32) -> io::Result<()> {
     string_clear(&mut seq.buffer);
     string_reserve(&mut seq.buffer, block_length + 1);
@@ -1223,6 +1442,15 @@ fn read_seq_block(seq: &mut BlastSeqData, block_length: u32) -> io::Result<()> {
     Ok(())
 }
 
+/// Parse the per-OID ambiguity table appended to the sequence block.
+///
+/// The first big-endian `u32` encodes both the record count and a
+/// format flag: the high bit set means each entry is a 64-bit
+/// `amb64_t` (used for large genomes), otherwise entries are 32-bit
+/// `amb32_t`. `format` is set to 1 / 0 accordingly, and the returned
+/// value is the number of decoded records (for format 1 it's half the
+/// raw count, matching the C `amb_data_len /= 2;` step). Ports
+/// `read_ambiguous_data` from `blast_to_fasta.c`.
 fn read_ambiguous_data(
     input: &[u8],
     output: &mut Vec<Amb>,
@@ -1262,6 +1490,15 @@ fn read_ambiguous_data(
     }
 }
 
+/// Decode the 2-bit packed nucleotide block in `seq.buffer` into ASCII
+/// bases in `seq.seq`, then overlay any ambiguous regions using the
+/// [`MASK2DNA`] table.
+///
+/// The final byte of the packed block holds both the trailing
+/// nucleotides and a 2-bit count of how many of them are valid (the C
+/// version decrements `unamb_data_len` then walks the four 2-bit
+/// fields high-to-low). Ports `reconstruct_sequence` from
+/// `blast_to_fasta.c`.
 fn reconstruct_sequence(
     seq: &mut BlastSeqData,
     mut unamb_data_len: u32,
@@ -1316,6 +1553,10 @@ fn reconstruct_sequence(
     seq.seq.len = nuc_len;
 }
 
+/// Read and decode the next OID's sequence. Looks up the sequence and
+/// ambiguity offsets in `idx_data`, reads the raw block, parses any
+/// ambiguity records, reconstructs the ASCII sequence, and advances
+/// the internal cursor. Ports `next_sequence` from `blast_to_fasta.c`.
 fn next_sequence(seq: &mut BlastSeqData, idx_data: &BlastIdxData) -> io::Result<i32> {
     let i = seq.curr_pos;
     let mut format = 0;
@@ -1345,6 +1586,9 @@ fn next_sequence(seq: &mut BlastSeqData, idx_data: &BlastIdxData) -> io::Result<
     Ok(0)
 }
 
+/// Write `seq` to `out` wrapped at `seq_width` columns, terminating
+/// each line with `\n`. Ports `write_sequence` from
+/// `blast_to_fasta.c`.
 fn write_sequence(seq: &BlastString, seq_width: usize, out: &mut dyn Write) -> io::Result<()> {
     let raw_seq = string_data(seq);
     let full_width_lines = (seq.len as usize) / seq_width;
@@ -1363,6 +1607,8 @@ fn write_sequence(seq: &BlastString, seq_width: usize, out: &mut dyn Write) -> i
     Ok(())
 }
 
+/// Release the buffers owned by `seq_data`. Ports `free_seq_data`
+/// from `blast_to_fasta.c`.
 fn free_seq_data(seq_data: &mut BlastSeqData) {
     free_string(&mut seq_data.buffer);
     free_string(&mut seq_data.seq);
@@ -1370,12 +1616,18 @@ fn free_seq_data(seq_data: &mut BlastSeqData) {
     seq_data.amb_data.shrink_to_fit();
 }
 
+/// Append every byte in `bytes` to the string. Rust helper used in
+/// place of the C `(const char *)` casts that feed
+/// `string_append_str` from raw `visible_string` buffers.
 fn string_append_bytes(s: &mut BlastString, bytes: &[u8]) {
     for &byte in bytes {
         string_append_char(s, byte);
     }
 }
 
+/// Return the string's bytes without the trailing NUL added by
+/// [`to_c_string`]. Useful for logging where the NUL would clutter
+/// the output.
 fn c_string_bytes(s: &mut BlastString) -> &[u8] {
     let data = to_c_string(s);
     &data[..data.len().saturating_sub(1)]
@@ -1598,10 +1850,14 @@ pub fn blast_to_fasta(db_prefix: &str, output_path: &str, _include_taxid: bool) 
     Ok(())
 }
 
+/// Render the one-line usage banner used by the CLI. Ports the
+/// `usage` function from `blast_to_fasta.c`.
 fn blast_to_fasta_usage(prog: &str) -> String {
     format!("{prog} [-hst] [-o out_file] [-w width] blast_volume")
 }
 
+/// Render the full multi-line `-h` help text. Ports the `help`
+/// function from `blast_to_fasta.c`.
 fn blast_to_fasta_help(prog: &str) -> String {
     [
         blast_to_fasta_usage(prog),
@@ -1617,6 +1873,12 @@ fn blast_to_fasta_help(prog: &str) -> String {
     .join("\n")
 }
 
+/// CLI entry point matching the original C `main` in `blast_to_fasta.c`.
+///
+/// Parses `-h/-o/-s/-t/-w` flags plus a single positional `blast_volume`
+/// base name, opens the matching `.nin`/`.nhr`/`.nsq` files, and writes
+/// FASTA output (one record per OID, or one per defline when `-s` is
+/// supplied; `-t` prepends `kraken:taxid|<id>|` headers).
 pub fn blast_to_fasta_main(args: &[String]) -> io::Result<()> {
     let prog = args
         .first()
@@ -1807,6 +2069,9 @@ mod tests {
     use super::*;
     use std::io::Cursor;
 
+    /// Write `bytes` to a unique temp-dir file named after `name` and
+    /// return its path; used to feed fixture data into the file-based
+    /// helpers under test.
     fn write_temp_file(name: &str, bytes: &[u8]) -> std::path::PathBuf {
         let path = std::env::temp_dir().join(format!("{name}_{}.bin", std::process::id()));
         std::fs::write(&path, bytes).unwrap();
@@ -1814,6 +2079,8 @@ mod tests {
     }
 
     #[test]
+    /// Verify the Hacker's-Delight `nlz` and `next_power_of_2`
+    /// implementations against a handful of boundary values.
     fn test_blast_utils_nlz_and_next_power_of_2() {
         assert_eq!(nlz(0), 32);
         assert_eq!(nlz(1), 31);
@@ -1825,6 +2092,8 @@ mod tests {
     }
 
     #[test]
+    /// Smoke-test the growable `BlastString` helpers
+    /// (append/copy/append/c-string/clear/free).
     fn test_blast_string_helpers() {
         let mut s = init_string();
         string_append_str(&mut s, "abc");
@@ -1853,6 +2122,8 @@ mod tests {
     }
 
     #[test]
+    /// Exercise `read_into_buffer` plus the bitfield decoders
+    /// `u32_to_amb32` / `u64_to_amb64`.
     fn test_blast_read_helpers_and_ambiguity_unpack() {
         let mut cursor = Cursor::new(vec![0x12, 0x34, 0x56, 0x78, b'h', b'i']);
         let mut buf = [0u8; 4];
@@ -1873,6 +2144,8 @@ mod tests {
     }
 
     #[test]
+    /// Round-trip a minimal synthetic `.nin` header through
+    /// `init_idx_data`/`read_idx_data`, asserting every parsed field.
     fn test_blast_index_helpers() {
         let path = write_temp_file(
             "blast_idx_test",
@@ -1907,6 +2180,9 @@ mod tests {
     }
 
     #[test]
+    /// Walk a tiny synthetic ASN.1 blob to validate the low-level
+    /// cursor primitives (sequence start, visible string, integer,
+    /// end-of-sequence detection).
     fn test_asn1_cursor_helpers() {
         let path = write_temp_file(
             "asn1_cursor_test",
@@ -1935,6 +2211,9 @@ mod tests {
     }
 
     #[test]
+    /// Cover the explicit-tag field helpers
+    /// (`asn1_get_optional_*_field`) and the `get_date` dispatch on
+    /// the string vs. structured branch.
     fn test_asn1_explicit_fields_and_date() {
         let path = write_temp_file(
             "asn1_fields_test",
@@ -1963,6 +2242,9 @@ mod tests {
     }
 
     #[test]
+    /// End-to-end test of `get_blast_deflines`: hand-crafted ASN.1
+    /// payload with a title, a `seq_gi` seq-id, a taxid, and a
+    /// memberships vector.
     fn test_blast_defline_readers() {
         let path = write_temp_file(
             "blast_defline_test",
@@ -2000,6 +2282,10 @@ mod tests {
     }
 
     #[test]
+    /// Exercise the header construction (`deflines_to_header` with a
+    /// taxid prefix) and the sequence reconstruction path
+    /// (`max_block_size`, `next_sequence`, `write_sequence`,
+    /// `get_nucleotide_length`) on minimal hand-built fixtures.
     fn test_blast_header_and_sequence_helpers() {
         let mut hdr_offsets = vec![];
         hdr_offsets.extend_from_slice(&0u32.to_be_bytes());
@@ -2072,6 +2358,8 @@ mod tests {
     }
 
     #[test]
+    /// Spot-check the protein-header fallback (`extract_readable_header`)
+    /// and the `NCBI2na` / `NCBIstdaa` decoders.
     fn test_extract_readable_header_and_ncbi_decode() {
         assert_eq!(extract_readable_header(b"\x00foo bar\x01z"), "foo bar");
         assert_eq!(decode_ncbi2na(&[0b00_01_10_11], 4), b"ACGT");
@@ -2080,6 +2368,8 @@ mod tests {
     }
 
     #[test]
+    /// Pin down the usage banner and the `-h` help text so any
+    /// rewording shows up as a test failure.
     fn test_blast_to_fasta_usage_and_help() {
         assert_eq!(
             blast_to_fasta_usage("blast_to_fasta"),
@@ -2089,6 +2379,8 @@ mod tests {
     }
 
     #[test]
+    /// Invoking the CLI with no positional argument must yield the
+    /// "Missing basename of BLAST volume" error.
     fn test_blast_to_fasta_main_requires_volume() {
         let err = blast_to_fasta_main(&["blast_to_fasta".to_string()]).unwrap_err();
         assert!(err.to_string().contains("Missing basename of BLAST volume"));

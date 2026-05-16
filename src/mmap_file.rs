@@ -47,6 +47,9 @@ impl MMapFile {
         Ok(MMapFile::ReadWrite { mmap, _file: file })
     }
 
+    /// Open (or create) `filename` and replace this instance's mapping with
+    /// the new one. Convenience wrapper around the constructors above that
+    /// mirrors the C++ `MMapFile::OpenFile` signature.
     pub fn open_file(
         &mut self,
         filename: &str,
@@ -78,6 +81,9 @@ impl MMapFile {
         }
     }
 
+    /// Raw pointer to the mapped region, matching the C++ `MMapFile::fptr()`
+    /// API. Returns null when the mapping is empty. Prefer [`as_slice`]
+    /// (`Self::as_slice`) in Rust code; this is kept for byte-level callers.
     pub fn fptr(&self) -> *const u8 {
         match self {
             MMapFile::ReadOnly { mmap, .. } => mmap.as_ptr(),
@@ -128,10 +134,13 @@ impl MMapFile {
         }
     }
 
+    /// Alias for [`sync`](`Self::sync`) using the C++ method name.
     pub fn sync_file(&self) -> io::Result<()> {
         self.sync()
     }
 
+    /// Sync any pending writes to disk and drop the mapping (mirrors the
+    /// C++ `CloseFile()` method). Subsequent calls become no-ops.
     pub fn close_file(&mut self) -> io::Result<()> {
         if matches!(self, MMapFile::Empty) {
             return Ok(());
@@ -148,6 +157,8 @@ impl MMapFile {
 }
 
 impl Drop for MMapFile {
+    /// Flush pending changes on drop (best effort; errors are swallowed —
+    /// matches the C++ destructor which calls `SyncFile()` unconditionally).
     fn drop(&mut self) {
         let _ = self.sync_file();
     }

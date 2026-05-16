@@ -19,6 +19,8 @@ pub struct Options {
     pub num_threads: usize,
 }
 
+/// Format the low `digits` bits of `mask` as a binary string, MSB-first.
+/// Used to print spaced-seed and toggle masks in the database header.
 pub fn mask2str(mask: u64, digits: i32) -> String {
     let mut s = String::new();
     for i in (0..digits).rev() {
@@ -27,6 +29,9 @@ pub fn mask2str(mask: u64, digits: i32) -> String {
     s
 }
 
+/// Parse `dump_table` command-line arguments into `opts`, validating that the
+/// mandatory hash table, taxonomy, and options filenames were supplied. Mirrors
+/// the original `getopt`-based parser.
 pub fn parse_command_line(args: &[String], opts: &mut Options) -> io::Result<()> {
     let mut i = 1usize;
     while i < args.len() {
@@ -81,6 +86,9 @@ pub fn parse_command_line(args: &[String], opts: &mut Options) -> io::Result<()>
     Ok(())
 }
 
+/// Return the `dump_table` usage text. The `exit_code` argument is kept for
+/// parity with the original C++ entry point but is unused — the caller surfaces
+/// the string through a normal error path.
 pub fn usage(_exit_code: i32) -> String {
     [
         "Usage: dump_table <options>",
@@ -98,6 +106,11 @@ pub fn usage(_exit_code: i32) -> String {
     .join("\n")
 }
 
+/// CLI entry point for `dump_table`: loads the compact hash table, taxonomy,
+/// and IndexOptions, prints database statistics to stdout, and (unless
+/// `--skip-counts`) tallies value counts per taxid and renders either a
+/// Kraken-style or MetaPhlAn-style report. Equivalent to `main()` in the
+/// original `dump_table.cc`.
 pub fn dump_table_main(args: &[String]) -> io::Result<()> {
     let mut opts = Options {
         output_filename: "/dev/fd/1".to_string(),

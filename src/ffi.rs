@@ -1,3 +1,8 @@
+//! Legacy `ffi_*` wrappers kept for older internal callers that used to
+//! cross a C ABI. There is no longer a real FFI boundary — every function
+//! here is a thin pass-through to the native Rust module APIs. Prefer the
+//! underlying module functions for new code.
+
 use std::io;
 
 use crate::aa_translate::translate_to_all_frames;
@@ -8,6 +13,8 @@ use crate::taxonomy::{generate_taxonomy_libtax, Taxonomy};
 use crate::types::IndexOptions;
 use crate::utilities::expand_spaced_seed_mask;
 
+/// Plain-data mirror of [`crate::types::TaxonomyNode`] exposed by the
+/// legacy `ffi_taxonomy_get_node` wrapper.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct TaxonomyNodeFields {
     pub parent_id: u64,
@@ -19,11 +26,14 @@ pub struct TaxonomyNodeFields {
     pub godparent_id: u64,
 }
 
+/// Bundle of a `MinimizerScanner` and its backing sequence buffer — needed
+/// because the C API kept the sequence alive externally.
 pub struct ScannerContext {
     pub scanner: MinimizerScanner,
     pub seq_storage: String,
 }
 
+/// Legacy shim: construct a [`MinimizerScanner`].
 pub fn ffi_scanner_new(
     k: isize,
     l: isize,
@@ -42,8 +52,11 @@ pub fn ffi_scanner_new(
     )
 }
 
+/// Legacy shim: drops the scanner (Rust handles this via `Drop` — kept for
+/// API parity with the old C ABI).
 pub fn ffi_scanner_destroy(_scanner: MinimizerScanner) {}
 
+/// Legacy shim: construct a [`ScannerContext`] (scanner plus owned sequence buffer).
 pub fn ffi_scanner_context_new(
     k: isize,
     l: isize,
@@ -65,8 +78,11 @@ pub fn ffi_scanner_context_new(
     }
 }
 
+/// Legacy shim: drops the scanner context.
 pub fn ffi_scanner_context_destroy(_context: ScannerContext) {}
 
+/// Legacy shim: copy `seq` into the context's owned buffer and point the
+/// scanner at the `[start, finish)` window.
 pub fn ffi_scanner_context_load_sequence(
     context: &mut ScannerContext,
     seq: &str,
@@ -80,32 +96,41 @@ pub fn ffi_scanner_context_load_sequence(
         .load_sequence(&context.seq_storage, start, finish);
 }
 
+/// Legacy shim: advance the scanner and return the next minimizer (or `None`).
 pub fn ffi_scanner_context_next_minimizer(context: &mut ScannerContext) -> Option<u64> {
     context.scanner.next_minimizer()
 }
 
+/// Legacy shim: report whether the last minimizer covered an ambiguous base.
 pub fn ffi_scanner_context_is_ambiguous(context: &ScannerContext) -> bool {
     context.scanner.is_ambiguous()
 }
 
+/// Legacy shim: build an empty [`CompactHashTable`].
 pub fn ffi_cht_new(capacity: usize, key_bits: usize, value_bits: usize) -> CompactHashTable {
     CompactHashTable::new(capacity, key_bits, value_bits)
 }
 
+/// Legacy shim: load a hash table from `hash.k2d`.
 pub fn ffi_cht_load(filename: &str, memory_mapping: bool) -> io::Result<CompactHashTable> {
     CompactHashTable::from_file(filename, memory_mapping)
 }
 
+/// Legacy shim: drop the hash table (Rust handles this via `Drop`).
 pub fn ffi_cht_destroy(_cht: CompactHashTable) {}
 
+/// Legacy shim: look up a key (returns 0 when absent).
 pub fn ffi_cht_get(cht: &CompactHashTable, key: u64) -> u32 {
     cht.get(key)
 }
 
+/// Legacy shim: locate the cell index for a key, if present.
 pub fn ffi_cht_find_index(cht: &CompactHashTable, key: u64) -> Option<usize> {
     cht.find_index(key)
 }
 
+/// Legacy shim: atomic compare-and-set on a key, writing the previous value
+/// into `old_value`. Returns true on success.
 pub fn ffi_cht_compare_and_set(
     cht: &CompactHashTable,
     key: u64,
@@ -115,6 +140,8 @@ pub fn ffi_cht_compare_and_set(
     cht.compare_and_set(key, new_value, old_value)
 }
 
+/// Legacy shim: compare-and-set targeting a specific cell index returned by
+/// [`ffi_cht_find_index`] — avoids a second probe.
 pub fn ffi_cht_direct_compare_and_set(
     cht: &CompactHashTable,
     idx: usize,
@@ -125,40 +152,52 @@ pub fn ffi_cht_direct_compare_and_set(
     cht.direct_compare_and_set(idx, key, new_value, old_value)
 }
 
+/// Legacy shim: write the hash table out to `hash.k2d`.
 pub fn ffi_cht_write(cht: &CompactHashTable, filename: &str) -> io::Result<()> {
     cht.write_table(filename)
 }
 
+/// Legacy shim: configured cell capacity of the hash table.
 pub fn ffi_cht_capacity(cht: &CompactHashTable) -> usize {
     cht.capacity()
 }
 
+/// Legacy shim: number of occupied cells.
 pub fn ffi_cht_size(cht: &CompactHashTable) -> usize {
     cht.size()
 }
 
+/// Legacy shim: number of key bits stored per cell.
 pub fn ffi_cht_key_bits(cht: &CompactHashTable) -> usize {
     cht.key_bits()
 }
 
+/// Legacy shim: number of value bits stored per cell.
 pub fn ffi_cht_value_bits(cht: &CompactHashTable) -> usize {
     cht.value_bits()
 }
 
+/// Legacy shim: 64-bit MurmurHash3 finalizer.
 pub fn ffi_murmurhash3(key: u64) -> u64 {
     murmurhash3(key)
 }
 
+/// Legacy shim: expand a spaced-seed mask by `bit_expansion_factor`.
 pub fn ffi_expand_spaced_seed_mask(mask: &mut u64, bit_expansion_factor: i32) {
     expand_spaced_seed_mask(mask, bit_expansion_factor);
 }
 
+/// Legacy shim: 6-frame DNA-to-protein translation, returning the six frames.
 pub fn ffi_translate_to_all_frames(dna: &str) -> Vec<String> {
     translate_to_all_frames(dna)
 }
 
+/// Legacy shim: previously freed a C-allocated string; here a no-op since
+/// the `String` is owned by Rust and will be dropped at end of scope.
 pub fn ffi_free_string(_s: String) {}
 
+/// Legacy shim: read `opts.k2d` into the caller-provided struct.
+/// Returns true on success, false on any I/O error.
 pub fn ffi_read_index_options(filename: &str, opts_out: &mut IndexOptions) -> bool {
     match IndexOptions::read_from_file(filename) {
         Ok(opts) => {
@@ -169,38 +208,49 @@ pub fn ffi_read_index_options(filename: &str, opts_out: &mut IndexOptions) -> bo
     }
 }
 
+/// Legacy shim: write `opts.k2d`. Returns true on success.
 pub fn ffi_write_index_options(filename: &str, opts: &IndexOptions) -> bool {
     opts.write_to_file(filename).is_ok()
 }
 
+/// Legacy shim: size of [`IndexOptions`] in bytes — used by C callers to
+/// allocate a buffer of the right size.
 pub fn ffi_sizeof_index_options() -> usize {
     std::mem::size_of::<IndexOptions>()
 }
 
+/// Legacy shim: load `taxo.k2d` and build the external-to-internal ID map.
 pub fn ffi_taxonomy_load(filename: &str, memory_mapping: bool) -> io::Result<Taxonomy> {
     let mut tax = Taxonomy::from_file(filename, memory_mapping)?;
     tax.generate_external_to_internal_id_map();
     Ok(tax)
 }
 
+/// Legacy shim: drop the taxonomy (Rust handles this via `Drop`).
 pub fn ffi_taxonomy_destroy(_taxonomy: Taxonomy) {}
 
+/// Legacy shim: number of taxonomy nodes (including the unused index 0).
 pub fn ffi_taxonomy_node_count(taxonomy: &Taxonomy) -> u64 {
     taxonomy.node_count() as u64
 }
 
+/// Legacy shim: translate an NCBI taxid to its internal (BFS-ordered) ID.
 pub fn ffi_taxonomy_get_internal_id(taxonomy: &Taxonomy, external_id: u64) -> u64 {
     taxonomy.get_internal_id(external_id)
 }
 
+/// Legacy shim: lowest common ancestor of two internal taxon IDs.
 pub fn ffi_taxonomy_lca(taxonomy: &Taxonomy, a: u64, b: u64) -> u64 {
     taxonomy.lowest_common_ancestor(a, b)
 }
 
+/// Legacy shim: returns true if `a` is `b` or an ancestor of `b`.
 pub fn ffi_taxonomy_is_a_ancestor_of_b(taxonomy: &Taxonomy, a: u64, b: u64) -> bool {
     taxonomy.is_a_ancestor_of_b(a, b)
 }
 
+/// Legacy shim: copy a taxonomy node into a plain-data struct suitable for
+/// crossing the old C ABI.
 pub fn ffi_taxonomy_get_node(taxonomy: &Taxonomy, internal_id: u64) -> TaxonomyNodeFields {
     let node = taxonomy.node(internal_id);
     TaxonomyNodeFields {
@@ -214,18 +264,23 @@ pub fn ffi_taxonomy_get_node(taxonomy: &Taxonomy, internal_id: u64) -> TaxonomyN
     }
 }
 
+/// Legacy shim: borrow the packed name string table.
 pub fn ffi_taxonomy_name_data(taxonomy: &Taxonomy) -> &[u8] {
     taxonomy.name_data()
 }
 
+/// Legacy shim: borrow the packed rank string table.
 pub fn ffi_taxonomy_rank_data(taxonomy: &Taxonomy) -> &[u8] {
     taxonomy.rank_data()
 }
 
+/// Legacy shim: write the taxonomy to `taxo.k2d`.
 pub fn ffi_taxonomy_write_to_disk(taxonomy: &Taxonomy, filename: &str) -> io::Result<()> {
     taxonomy.write_to_disk(filename)
 }
 
+/// Legacy shim: build `taxo.k2d` from NCBI `nodes.dmp` / `names.dmp` plus a
+/// `seqid2taxid.map`. Mirrors the original `lib_taxonomy_generate` entry point.
 pub fn ffi_generate_taxonomy(
     nodes_filename: &str,
     names_filename: &str,

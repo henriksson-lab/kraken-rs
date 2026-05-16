@@ -1,3 +1,12 @@
+//! Command-line interface for the `kraken2` binary.
+//!
+//! The original C++ project shipped several standalone executables glued together by
+//! Perl wrappers (`kraken2`, `kraken2-build`, `kraken2-inspect`). Here every subcommand
+//! is hung off a single `clap` parser, and the dispatcher translates parsed arguments
+//! back into the legacy positional/short-flag argv expected by each translated
+//! `*_main` function in the library. That indirection keeps the underlying ported
+//! code unchanged while giving end users a single uniform CLI.
+
 use clap::{Parser, Subcommand};
 
 use crate::blast;
@@ -9,6 +18,8 @@ use crate::estimate;
 use crate::lookup;
 use crate::mmtest;
 
+/// Top-level `clap` parser for the `kraken2` binary; delegates to one of the
+/// [`Commands`] subcommands.
 #[derive(Parser)]
 #[command(name = "kraken2", about = "Taxonomic sequence classification system")]
 struct Cli {
@@ -16,6 +27,8 @@ struct Cli {
     command: Commands,
 }
 
+/// Subcommands exposed by the `kraken2` binary. Each variant corresponds to one of the
+/// original C++ tools (or, for the trailing passthroughs, to a translated standalone).
 #[derive(Subcommand)]
 enum Commands {
     /// Classify sequences against a Kraken 2 database
@@ -296,15 +309,21 @@ enum Commands {
     Mmtest,
 }
 
+/// Push a bare boolean-style flag (no value) into the translated-argv vector.
 fn push_flag(args: &mut Vec<String>, flag: &str) {
     args.push(flag.to_string());
 }
 
+/// Push a `-flag value` pair into the translated-argv vector. `value` is rendered via
+/// `ToString`, mirroring how the original C++ tools accept stringly-typed arguments.
 fn push_option<T: ToString>(args: &mut Vec<String>, flag: &str, value: T) {
     args.push(flag.to_string());
     args.push(value.to_string());
 }
 
+/// Build the legacy positional/short-flag argv expected by `classify::classify_main`
+/// from the high-level user-facing options. Expands the `--db DIR` shortcut into the
+/// three separate `-H/-t/-o` file paths the C++ tool consumes.
 #[allow(clippy::too_many_arguments)]
 fn classify_args(
     db: String,
@@ -378,6 +397,8 @@ fn classify_args(
     args
 }
 
+/// Build the legacy argv expected by `build_db::build_db_main`. Skips optional flags
+/// (`-M`, `-X`, `-F`, `-S`, `-T`) when the corresponding CLI option was not supplied.
 #[allow(clippy::too_many_arguments)]
 fn build_db_args(
     hashtable: String,
@@ -429,6 +450,7 @@ fn build_db_args(
     args
 }
 
+/// Build the legacy argv expected by `estimate::estimate_capacity_main`.
 #[allow(clippy::too_many_arguments)]
 fn estimate_args(
     kmer_len: usize,
@@ -458,6 +480,8 @@ fn estimate_args(
     args
 }
 
+/// Build the legacy argv expected by `blast::blast_to_fasta_main`. The BLAST database
+/// prefix is passed positionally after the optional `-o` / `-t` flags.
 fn blast_to_fasta_args(input: String, output: String, include_taxid: bool) -> Vec<String> {
     let mut args = vec!["blast_to_fasta".to_string()];
     push_option(&mut args, "-o", output);
@@ -468,12 +492,36 @@ fn blast_to_fasta_args(input: String, output: String, include_taxid: bool) -> Ve
     args
 }
 
+/// Prepend `prog` as argv[0] and forward the remaining arguments verbatim. Used for
+/// subcommands (`dump_table`, `lookup_accession_numbers`, `k2mask`) whose translated
+/// `*_main` parses its own legacy-style argv directly.
 fn passthrough_args(prog: &str, args: Vec<String>) -> Vec<String> {
     let mut full_args = vec![prog.to_string()];
     full_args.extend(args);
     full_args
 }
 
+/// Parse the given argv (typically `std::env::args()`) and dispatch to the matching
+/// subcommand entry point.
+///
+/// Each subcommand maps to one translated `*_main` in the library:
+/// * `classify` — query a Kraken 2 database with FASTA/FASTQ reads and emit per-read
+///   assignments plus an optional Kraken/MPA report (`classify::classify_main`).
+/// * `build` — build a `hash.k2d` / `taxo.k2d` / `opts.k2d` database from a sequence
+///   library and taxonomy (`build_db::build_db_main`).
+/// * `estimate` — estimate the hash-table capacity needed for a library before
+///   building (`estimate::estimate_capacity_main`); prints the recommended size.
+/// * `download` — fetch taxonomy dumps and/or reference library FASTAs from NCBI.
+/// * `clean` — remove intermediate library/taxonomy files left over after a build.
+/// * `inspect` — load a built database and print either summary stats (`--skip-counts`)
+///   or a Kraken/MPA-style report of stored value counts.
+/// * `blast2fasta` — convert a BLAST nucleotide DB into FASTA, optionally annotating
+///   headers with taxids.
+/// * `dump_table`, `lookup_accession_numbers`, `k2mask` — passthrough wrappers around
+///   the corresponding translated standalone tools.
+/// * `mmtest` — minimizer-scanner smoke test; prints its self-test transcript.
+///
+/// Returns the integer exit status that should be passed to `std::process::exit`.
 pub fn run_cli_from<I, T>(args: I) -> i32
 where
     I: IntoIterator<Item = T>,
@@ -758,6 +806,8 @@ where
 mod tests {
     use super::*;
 
+    /// Spot-check that the CLI-side `classify_args` builder emits the legacy short flags
+    /// (`-H`, `-m`, `-K`) and positional input expected by `classify::classify_main`.
     #[test]
     fn test_classify_args_routes_to_translated_flags() {
         let args = classify_args(
@@ -788,6 +838,8 @@ mod tests {
         assert!(args.contains(&"reads.fq".to_string()));
     }
 
+    /// Pin the default value of `--minimum-hit-groups` to `2`, matching the original
+    /// Perl wrapper's hard-coded default.
     #[test]
     fn test_classify_cli_default_minimum_hit_groups_matches_wrapper() {
         let cli = Cli::try_parse_from(["kraken2", "classify", "--db", "db", "reads.fq"]).unwrap();
@@ -799,6 +851,8 @@ mod tests {
         }
     }
 
+    /// Spot-check that `build_db_args` forwards the optional `-F`, `-X`, and `-M`
+    /// flags when their corresponding CLI options are set.
     #[test]
     fn test_build_db_args_routes_to_translated_flags() {
         let args = build_db_args(
@@ -826,6 +880,8 @@ mod tests {
         assert!(args.contains(&"-M".to_string()));
     }
 
+    /// Spot-check that `estimate_args` emits `-X`, `-S`, and `-T` for the protein
+    /// flag and the optional spaced-seed/toggle masks.
     #[test]
     fn test_estimate_args_routes_to_translated_flags() {
         let args = estimate_args(
@@ -844,6 +900,8 @@ mod tests {
         assert!(args.contains(&"-T".to_string()));
     }
 
+    /// Spot-check the `blast2fasta` argv builder: `-o` for output, `-t` for include-taxid,
+    /// and the input prefix appended positionally.
     #[test]
     fn test_blast_to_fasta_args_routes_to_translated_flags() {
         let args = blast_to_fasta_args("db/core_nt.00".to_string(), "out.fna".to_string(), true);
@@ -853,6 +911,8 @@ mod tests {
         assert!(args.contains(&"db/core_nt.00".to_string()));
     }
 
+    /// Check that `passthrough_args` puts the program name in argv[0] and preserves
+    /// the rest of the user-provided argv untouched.
     #[test]
     fn test_passthrough_args_prefixes_program_name() {
         let args = passthrough_args("dump_table", vec!["-H".to_string(), "hash".to_string()]);

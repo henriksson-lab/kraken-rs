@@ -1,6 +1,10 @@
 use crate::minimizer::MinimizerScanner;
 use crate::types::{CURRENT_REVCOM_VERSION, DEFAULT_TOGGLE_MASK};
 
+/// Minimizer self-test: scan a fixed 13-base sequence with k=10, l=5 and
+/// return one hex-encoded minimizer per line. Port of the C++ `mmtest.cc`
+/// program; useful as a smoke test that the scanner still produces the
+/// same byte stream as the reference implementation.
 pub fn mmtest_main() -> String {
     let seq = "ACGATCGACGACG";
     let mut scanner =

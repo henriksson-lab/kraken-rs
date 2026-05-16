@@ -46,6 +46,9 @@ pub struct IndexOptions {
 }
 
 impl IndexOptions {
+    /// Construct a zero-initialized `IndexOptions`. All fields (including
+    /// padding) are set to 0, matching how the C++ build path initializes
+    /// the struct before writing to disk.
     pub fn new() -> Self {
         // Safety: zero-initialized is valid for this repr(C) struct
         unsafe { std::mem::zeroed() }
@@ -76,6 +79,7 @@ impl IndexOptions {
 }
 
 impl Default for IndexOptions {
+    /// Same as [`IndexOptions::new`] — zero-initialized.
     fn default() -> Self {
         Self::new()
     }
@@ -103,16 +107,23 @@ pub struct CompactHashCell {
 }
 
 impl CompactHashCell {
+    /// Extract the compacted key (high bits) from this cell. The returned
+    /// value is the truncated MurmurHash3 of the original key — the full
+    /// key is never stored.
     #[inline]
     pub fn hashed_key(&self, value_bits: usize) -> HKey {
         (self.data >> value_bits) as HKey
     }
 
+    /// Extract the stored value (low `value_bits` bits) from this cell.
     #[inline]
     pub fn value(&self, value_bits: usize) -> HValue {
         self.data & ((1u32 << value_bits) - 1)
     }
 
+    /// Pack a compacted key and value into the 32-bit cell. The key goes in
+    /// the high bits, the value in the low `value_bits` bits. `_key_bits` is
+    /// unused (kept for parity with the C++ signature).
     #[inline]
     pub fn populate(
         &mut self,
@@ -180,6 +191,8 @@ impl Sequence {
 }
 
 impl std::fmt::Display for Sequence {
+    /// Delegate to [`to_fasta_string`](Sequence::to_fasta_string) so that
+    /// `format!("{}", seq)` round-trips a record back into FASTA/FASTQ text.
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.to_fasta_string())
     }

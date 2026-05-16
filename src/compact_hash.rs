@@ -62,10 +62,15 @@ impl CompactHashTable {
         }
     }
 
+    /// C++-style alternate constructor that took a `const char *`. Kept for
+    /// symmetry with the original API; defers to `from_file`.
     pub fn from_cstr(filename: &str, memory_mapping: bool) -> io::Result<Self> {
         Self::from_file(filename, memory_mapping)
     }
 
+    /// Load the entire table into a heap-allocated `Vec`. Used when
+    /// memory-mapping is disabled — reads the 32-byte header then all
+    /// `capacity * 4` cell bytes via a single `read_exact`.
     fn from_file_read(filename: &str) -> io::Result<Self> {
         let mut file = File::open(filename)?;
         let mut buf8 = [0u8; 8];
@@ -104,6 +109,11 @@ impl CompactHashTable {
         })
     }
 
+    /// Load the table by memory-mapping the file (read-only). The mapping
+    /// is retained inside the returned table; cells are still copied into
+    /// an owned `Vec` so we can keep the rest of the API uniform with the
+    /// read-into-memory variant. Sets `file_backed = true` so mutating
+    /// operations (`compare_and_set`) refuse to write.
     fn from_file_mmap(filename: &str) -> io::Result<Self> {
         let mmap = MMapFile::open_read_only(filename)?;
         let data = mmap.as_slice();
@@ -172,6 +182,13 @@ impl CompactHashTable {
 
     /// Look up a value by key. Returns 0 if not found.
     /// Exact port of C++ `CompactHashTable::Get()`.
+    ///
+    /// The key is mixed with MurmurHash3 and then truncated; the high
+    /// `key_bits` of the hash are compared against `hashed_key` stored in
+    /// each probed cell. A value of `0` indicates an empty cell and
+    /// terminates the probe. Cell `i+step (mod capacity)` is examined
+    /// next using linear probing (`step = 1`); the probe also terminates
+    /// after wrapping back to the starting index.
     pub fn get(&self, key: u64) -> HValue {
         let hc = murmurhash3(key);
         let compacted_key = (hc >> (32 + self.value_bits)) as HKey;
@@ -228,6 +245,14 @@ impl CompactHashTable {
     /// Otherwise, set *old_value to the current cell value.
     /// Returns true if the set was successful.
     /// Exact port of C++ `CompactHashTable::CompareAndSet()`.
+    ///
+    /// Thread safety is provided by the 256 `parking_lot::Mutex` zone locks
+    /// (C++ used `omp_lock_t zone_locks_[LOCK_ZONES]`); the lock for
+    /// `idx % LOCK_ZONES` is held while reading and writing a cell. Refuses
+    /// to write if the table is file-backed (mmap'd read-only) or if the
+    /// caller-supplied `new_value` is zero (zero is the sentinel for empty
+    /// cells). Aborts (panics) if the probe wraps the entire table, which
+    /// matches the C++ `errx(EX_SOFTWARE, ...)` exit.
     pub fn compare_and_set(&self, key: u64, new_value: HValue, old_value: &mut HValue) -> bool {
         if self.file_backed || new_value == 0 {
             return false;
@@ -282,8 +307,12 @@ impl CompactHashTable {
         }
     }
 
-    /// Direct compare-and-set at a specific index.
+    /// Direct compare-and-set at a specific index (no probing).
     /// Exact port of C++ `CompactHashTable::DirectCompareAndSet()`.
+    ///
+    /// Used by `build_db` when the caller has already located the slot via
+    /// `find_index`. Acquires the zone lock for `idx`, then performs the
+    /// same value-equality check as `compare_and_set`.
     pub fn direct_compare_and_set(
         &self,
         idx: usize,
@@ -313,7 +342,10 @@ impl CompactHashTable {
         }
     }
 
-    /// Get value counts across all cells (parallel).
+    /// Histogram of stored values across all occupied cells. The C++ version
+    /// parallelises this across OpenMP threads with per-thread maps; the
+    /// Rust port currently runs it serially (the operation is rarely on
+    /// the hot path).
     pub fn get_value_counts(&self) -> TaxonCounts {
         let mut counts = TaxonCounts::new();
         for i in 0..self.capacity {
@@ -325,32 +357,47 @@ impl CompactHashTable {
         counts
     }
 
-    /// LINEAR_PROBING: always returns 1.
+    /// Compute the linear-probing step. Always returns 1 in the current
+    /// build (matches `#ifdef LINEAR_PROBING` branch in the C++). The
+    /// double-hashing alternative `(hc >> 8) | 1` is documented in the
+    /// C++ source but disabled by default.
     #[inline]
     fn second_hash(&self, _first_hash: u64) -> usize {
         1
     }
 
+    /// Number of cells in the table (fixed at construction time).
     pub fn capacity(&self) -> usize {
         self.capacity
     }
 
+    /// Number of occupied cells. Tracked via an `AtomicUsize` so
+    /// `compare_and_set` callers from multiple threads see consistent counts.
     pub fn size(&self) -> usize {
         self.size.load(Ordering::Relaxed)
     }
 
+    /// Width of the truncated key (the hash prefix) packed into each cell.
+    /// `key_bits + value_bits == 32`.
     pub fn key_bits(&self) -> usize {
         self.key_bits
     }
 
+    /// Width of the value packed into the low bits of each cell.
+    /// `key_bits + value_bits == 32`.
     pub fn value_bits(&self) -> usize {
         self.value_bits
     }
 
+    /// Fraction of cells currently occupied (`size / capacity`). Above
+    /// roughly 0.95 the linear-probing path lengths blow up and the table
+    /// should be enlarged.
     pub fn occupancy(&self) -> f64 {
         self.size() as f64 / self.capacity as f64
     }
 
+    /// No-op consume of the table. Provided for symmetry with the C++
+    /// destructor; Rust drops the storage automatically.
     pub fn destroy(self) {}
 }
 

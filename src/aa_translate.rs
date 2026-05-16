@@ -31,7 +31,16 @@ fn rev_lookup(ch: u8) -> u8 {
 /// Exact port of C++ `TranslateToAllFrames()` from `aa_translate.cc`.
 ///
 /// Returns a Vec of 6 strings. Forward frames are indices 0-2, reverse frames are 3-5.
-/// Reverse frames are built by prepending from the end of a max-sized buffer.
+/// Reverse frames are built by prepending from the end of a max-sized buffer
+/// (mirroring the original C++ that fills a fixed-size buffer from both ends
+/// and then trims the unused space).
+///
+/// The codon table is indexed using **AGCT** ordering (not ACGT) for both
+/// forward and reverse codons — this quirk lets the same translation table
+/// double as the complement lookup when reading reverse codons. Stop codons
+/// translate to `*`; codons containing an ambiguous base (any character that
+/// isn't A/C/G/T) translate to `X` for up to three positions after the
+/// ambiguous base.
 pub fn translate_to_all_frames(dna_seq: &str) -> Vec<String> {
     let dna = dna_seq.as_bytes();
     let max_size = dna.len() / 3 + 1;

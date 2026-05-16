@@ -63,10 +63,17 @@ impl Default for SDust {
 }
 
 impl SDust {
+    /// Construct an `SDust` instance with all defaults (window size 64,
+    /// threshold 20, lowercase masking). Convenience alias used by callers
+    /// that don't need to override any parameters.
     pub fn default_new() -> Self {
         Self::default()
     }
 
+    /// Construct a tuned `SDust` instance. `window_size` controls the
+    /// sliding-window length over triplets, `threshold` is the score gate
+    /// (higher = stricter, default 20), and `replace_masked_with` overrides
+    /// the default lowercase-masking policy with a fixed character.
     pub fn new(window_size: i32, threshold: i32, replace_masked_with: Option<u8>) -> Self {
         Self {
             window_size,
@@ -76,6 +83,9 @@ impl SDust {
         }
     }
 
+    /// Clear all per-sequence state (k-mer queue, perfect intervals, mask
+    /// ranges, counters) so the same `SDust` can be reused for the next
+    /// contiguous run of valid DNA characters.
     pub fn reset(&mut self) {
         self.kmers.clear();
         self.perfect_intervals.clear();
@@ -87,12 +97,19 @@ impl SDust {
         self.rv = 0;
     }
 
+    /// Return the byte that should replace `c` at a masked position. Defaults
+    /// to the ASCII lowercase of `c`; overridden when the user passes
+    /// `-r/--replace-masked-with` to use a fixed character (e.g. `N`).
     fn process_masked_nucleotide(&self, c: u8) -> u8 {
         self.replace_masked_with
             .unwrap_or_else(|| c.to_ascii_lowercase())
     }
 }
 
+/// Map an ASCII nucleotide byte to a 2-bit code: A/a=0, C/c=1, G/g=2,
+/// T/t/U/u=3, and anything else (including N and IUPAC ambiguity codes) to 4
+/// to signal "not a valid DNA base". Mirrors the `asc2dna` lookup table in
+/// the original C++.
 fn asc2dna(c: u8) -> u8 {
     match c {
         b'A' | b'a' => 0,
@@ -103,20 +120,33 @@ fn asc2dna(c: u8) -> u8 {
     }
 }
 
+/// Return the usage text for `k2mask`, parameterised by the program name as
+/// it appeared in argv[0].
 pub fn usage(prog: &str) -> String {
     format!(
         "usage: {prog} [-T | -level threshold] [-W | -window window size] [-i | -in input file]\n [-w | -width sequence width] [-o | -out output file] [-r | -replace-masked-with char]\n [-f | -outfmt output format] [-t | -threads threads]\n"
     )
 }
 
+/// Return `true` if `filename` refers to an existing path. Mirrors the
+/// `fileExists` helper from the original C++ `k2mask`.
 pub fn file_exists(filename: &str) -> bool {
     Path::new(filename).exists()
 }
 
+/// Case-insensitive equality check for two ASCII strings, mirroring the
+/// `stricasecmp` helper from the original C++ used to compare format names.
 pub fn stricasecmp(s1: &str, s2: &str) -> bool {
     s1.eq_ignore_ascii_case(s2)
 }
 
+/// Advance the SDust sliding window by one triplet `t` (a packed 3-base
+/// integer in 0..64). Maintains the dual counters `cw`/`rw` (whole window)
+/// and `cv`/`rv` (suffix subwindow used for "perfect" detection): increments
+/// for the new triplet, evicts the oldest triplet when the window is full,
+/// and trims the suffix whenever the new triplet would drive its score over
+/// twice the threshold. These invariants are what let `find_perfect` run in
+/// amortised constant time per base.
 pub fn shift_window(sd: &mut SDust, t: i32) {
     let mut s;
     if sd.kmers.len() as i32 >= sd.window_size - 2 {
@@ -149,6 +179,10 @@ pub fn shift_window(sd: &mut SDust, t: i32) {
     }
 }
 
+/// Flush perfect intervals that have fallen out of the active window into
+/// `ranges`, merging adjacent or overlapping intervals with the previous
+/// range. Called once per window-step; intervals whose `start < window_start`
+/// are committed and removed from `perfect_intervals`.
 pub fn save_masked_regions(sd: &mut SDust, window_start: i32) {
     let mut saved = false;
     if sd.perfect_intervals.is_empty() || sd.perfect_intervals.last().unwrap().start >= window_start
@@ -182,6 +216,13 @@ pub fn save_masked_regions(sd: &mut SDust, window_start: i32) {
     }
 }
 
+/// Identify maximal "perfect" low-complexity intervals inside the current
+/// window and insert them into `perfect_intervals` sorted by start position.
+/// Walks the suffix of the k-mer queue from right to left, updating a copy of
+/// the suffix counter array; an interval is recorded whenever its score
+/// `right * 10 > threshold * length` and it dominates any previously stored
+/// interval at the same anchor. Caller must have already ensured the current
+/// window is above threshold (`rw * 10 > l * threshold`).
 pub fn find_perfect(sd: &mut SDust, window_start: i32) {
     let mut cv = sd.cv;
     let mut max_left = 0;
@@ -221,6 +262,12 @@ pub fn find_perfect(sd: &mut SDust, window_start: i32) {
     }
 }
 
+/// Run the symmetric DUST algorithm over `seq[..size]`. For each valid base,
+/// shift the triplet code into the window, save any committed perfect
+/// intervals, advance the window counters, and (when the whole-window score
+/// crosses threshold) call `find_perfect` to record new candidate intervals.
+/// `_offset` is retained for parity with the C++ signature; positions are
+/// recorded relative to the start of the slice.
 pub fn run_symmetric_dust(sd: &mut SDust, seq: &mut [u8], size: usize, _offset: i32) {
     let mut triplet = 0i32;
     let mut window_start = 0i32;
@@ -246,6 +293,9 @@ pub fn run_symmetric_dust(sd: &mut SDust, seq: &mut [u8], size: usize, _offset: 
     }
 }
 
+/// Write `seq` to `out` as a FASTA record, wrapping the sequence body at
+/// `width` characters per line. The optional comment is appended to the
+/// header line separated by a single space.
 pub fn print_fasta(seq: &Sequence, out: &mut dyn Write, width: usize) -> io::Result<()> {
     write!(out, ">{}", seq.header)?;
     if !seq.comment.is_empty() {
@@ -263,6 +313,12 @@ pub fn print_fasta(seq: &Sequence, out: &mut dyn Write, width: usize) -> io::Res
     out.flush()
 }
 
+/// Mask the sequence held in `sd.seq` in place. Splits the sequence at
+/// invalid bases (N and other non-ACGTU bytes), uppercases each run of valid
+/// DNA, runs symmetric DUST over the run, then rewrites each computed range
+/// using `process_masked_nucleotide`. The internal state is reset between
+/// runs so the same `SDust` can process multiple contiguous regions of one
+/// record.
 pub fn mask(sd: &mut SDust) -> &mut SDust {
     let mut seq_bytes = std::mem::take(&mut sd.seq.seq).into_bytes();
     let mut i = 0usize;
@@ -291,6 +347,9 @@ pub fn mask(sd: &mut SDust) -> &mut SDust {
     sd
 }
 
+/// Build a fresh `SDust` with the supplied parameters, hand it ownership of
+/// `seq`, mask it, and return the masked `Sequence`. Used as the per-task
+/// worker for the rayon parallel pipeline so each thread has its own state.
 fn mask_owned(
     mut seq: Sequence,
     window_size: i32,
@@ -303,6 +362,12 @@ fn mask_owned(
     sd.seq
 }
 
+/// CLI entry point for `k2mask`. Parses arguments (window, threshold, in/out
+/// paths, output format, thread count, replacement character), reads FASTA
+/// records in batches, masks each batch on a rayon thread pool when threads
+/// > 1, and writes wrapped FASTA output. Equivalent to `main()` in the
+/// original `k2mask.cc`; `threads` is interpreted as `n-1` workers + the
+/// caller thread driving I/O, matching the C++ behaviour.
 pub fn k2mask_main(args: &[String]) -> io::Result<()> {
     let prog = args.first().map(String::as_str).unwrap_or("k2mask");
     let mut line_width = DEFAULT_LINE_WIDTH;
