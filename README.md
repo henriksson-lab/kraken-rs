@@ -200,17 +200,19 @@ while let Some(minimizer) = scanner.next_minimizer() {
 
 ## Benchmark Notes
 
+Original benchmark baseline: vendored upstream Kraken 2 commit `e2dae1035468` (`v2.17.1-11-ge2dae10`).
+
 The current stored benchmark is in [BENCHMARKS.md](BENCHMARKS.md).
 
-The most recent real-data `classify` benchmark uses a `5,000,000` read-pair subset (`1,510 Mbp` per mate) from `/husky/henriksson/atrandi/rawdata/241206_novaseq_wgs3/filtered`, taskset-pinned to 16 cores, 3 interleaved trials per row, output to `/dev/null`, against the repository reference DB:
+The most recent real-data `classify` benchmark uses a `5,000,000` read-pair subset (`1,510 Mbp` per mate) from `/husky/henriksson/atrandi/rawdata/241206_novaseq_wgs3/filtered`, taskset-pinned to 16 cores, 3 interleaved trials per row, output to `/dev/null`, against the repository reference DB. The rerun used the archived benchmark Rust binary `.bench/classify.release.lto-on` and bundled C++ `kraken2/src/classify`; detailed commands and per-trial rows are staged in `benchmarks/kraken-rs.tsv` in the presentation repo.
 
 | Threads | C++ median | Rust median | Rust faster by |
 |---|---:|---:|---:|
-| `-p 1` | `98.30 s` | `62.51 s` | `36%` |
-| `-p 4` | `24.36 s` | `17.73 s` | `27%` |
-| `-p 8` | `14.09 s` | `11.35 s` | `19%` |
+| `-p 1` | `82.58 s` | `62.09 s` | `25%` |
+| `-p 4` | `21.53 s` | `18.21 s` | `15%` |
+| `-p 8` | `11.69 s` | `17.19 s` | `-47%` |
 
-Output is byte-identical (SHA-256 `226edc173dfa4d048b3992c7fe2344064d65765e01279d4175e1c2f43fc62f9b`).
+A 600k smoke output from the same binaries was byte-identical (SHA-256 `2c8fa322800bf7c26784e913b655b7ac3a7a5a6684d0fd90962928c162bee658`). Preserved 5M `-p 4` outputs are also byte-identical (SHA-256 `226edc173dfa4d048b3992c7fe2344064d65765e01279d4175e1c2f43fc62f9b`). The timed rerun wrote output to `/dev/null`.
 
 Earlier `600,000` read-pair runs are kept in [BENCHMARKS.md](BENCHMARKS.md) for context. On a `-p 4` `600k` measurement, peak RSS was C++ `187,568 kB` vs Rust `59,812 kB` (`68%` less for Rust).
 
