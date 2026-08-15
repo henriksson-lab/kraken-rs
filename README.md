@@ -4,6 +4,7 @@ A Rust port of [Kraken 2](https://github.com/DerrickWood/kraken2) — a taxonomi
 
 This crate provides both a command-line tool and a library for classifying biological sequences against a Kraken 2 database.
 
+* 2026-08-01: CI added
 * 2026-05-02: Made it easier to access internals as a library
 * 2026-04-29: Latest audit, passes on real data test.  If you decide to use it, ensure to compare the output on our own data with the original Kraken 2 software, as bugs may still remain. On par, possibly 20% faster, than original KRAKEN2 (take with a pinch of salt)
 
@@ -233,7 +234,16 @@ C/U  header  taxid  length  hitlist
 
 ## Citing
 
-Wood, D.E., Lu, J. & Langmead, B. Improved metagenomic analysis with Kraken 2. Genome Biol 20, 257 (2019). https://doi.org/10.1186/s13059-019-1891-0
+Please cite the original software:
+
+> Wood, D.E., Lu, J. & Langmead, B. Improved metagenomic analysis with Kraken 2. Genome Biol 20, 257 (2019). https://doi.org/10.1186/s13059-019-1891-0
+
+If you use our translation, we recommend that you also cite the precise version you use. If you link to [crates.io](http://crates.io), you can cite the version number;
+but if you link to our Git repository, for reproducibility, it is better that you provide the URL to the repository and the git hash (Github lists it high up on the page as 7 letters, under the Code button, e.g. '21751cd')
+
+In addition, we appreciate if you cite the paper below describing the translation approach. If for some reason you struggle with journal citation limits, please prioritizing citing the original software over our translation paper.
+
+> Johan Henriksson. Static analysis-guided agentic AI translation enables Rust as a full stack bioinformatics language. arXiv:2608.13029, 2026. https://doi.org/10.48550/arXiv.2608.13029
 
 ## License
 
